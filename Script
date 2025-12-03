@@ -1945,7 +1945,7 @@ local function RunQuest04()
     local Players = game:GetService("Players")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local Workspace = game:GetService("Workspace")
-    local VirtualInputManager = game:GetService("VirtualInputManager")
+    
     local player = Players.LocalPlayer
     local playerGui = player:WaitForChild("PlayerGui")
     
@@ -2016,18 +2016,6 @@ local function RunQuest04()
     if DialogueService then print("✅ DialogueService Ready!") else warn("⚠️ DialogueService not found") end
     if UIController then print("✅ UIController Ready!") else warn("⚠️ UIController not found") end
     
-
-    local function VirtualClick(guiObject)
-        if not guiObject then return end
-        local absPos = guiObject.AbsolutePosition
-        local absSize = guiObject.AbsoluteSize
-        local x = absPos.X + absSize.X/2
-        local y = absPos.Y + absSize.Y/2
-
-        VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, guiObject, 0)
-        task.wait(0.05)
-        VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, guiObject, 0)
-    end
     ----------------------------------------------------------------
     -- QUEST SYSTEM
     ----------------------------------------------------------------
@@ -2270,22 +2258,18 @@ local function RunQuest04()
     
     local function findWeakestWeapon()
         local weapons = getPlayerWeapons()
-        
-        if #weapons == 0 then
+        if not weapons or #weapons == 0 then
             return nil, "No weapons found in inventory!"
         end
-        
-        if #weapons == 1 then
-            return nil, "Only 1 weapon available, cannot sell!"
+        if #weapons <= SELLCONFIG.KEEPBESTCOUNT then
+            return nil, "Not enough weapons to sell!"
         end
-        
+
         local equippedGUID = getEquippedWeaponGUID()
         local weakestWeapon = nil
-        
+
         for _, weapon in ipairs(weapons) do
-            if weapon.GUID == equippedGUID then
-                print(string.format("   ⚠️ Skipping equipped weapon: %s (Dmg: %.2f, Quality: %.1f)", weapon.Type, weapon.Damage, weapon.Quality))
-            else
+            if weapon.GUID ~= equippedGUID then
                 if not weakestWeapon then
                     weakestWeapon = weapon
                 elseif weapon.Damage < weakestWeapon.Damage then
@@ -2295,13 +2279,24 @@ local function RunQuest04()
                 end
             end
         end
-        
+
+        -- Fallback: ถ้าไม่เจอ weakest ที่ไม่ใช่ชิ้นที่ใส่อยู่ ให้ขายชิ้นอื่นที่มีใน list
+        if not weakestWeapon then
+            for _, weapon in ipairs(weapons) do
+                if weapon.GUID ~= equippedGUID then
+                    weakestWeapon = weapon
+                    break
+                end
+            end
+        end
+
         if not weakestWeapon then
             return nil, "All weapons are equipped or no valid weapon to sell!"
         end
-        
+
         return weakestWeapon, nil
     end
+
     
     local function printWeaponsSummary()
         print("\n   ⚔️  === WEAPONS INVENTORY ===")
@@ -2420,194 +2415,58 @@ local function RunQuest04()
         end
     end
     
-    ----------------------------------------------------------------
-    -- OBJECTIVE: Sell Weakest Weapon (with fallback)
-    ----------------------------------------------------------------
     local function doSellWeakestWeapon()
-        print("💰 Objective: Sell Weakest Weapon (with fallback)...")
+        print("Objective Selling Weakest Weapon...")
+        printWeaponsSummary()
 
-        local gui = player:FindFirstChild("PlayerGui")
-        if not gui then
-            warn("   ❌ PlayerGui not found")
+        local weakestWeapon, errorMsg = findWeakestWeapon()
+        if not weakestWeapon then
+            warn(string.format("ERROR %s", errorMsg))
+            -- ตรงนี้ให้ return true เพื่อให้ quest ข้าม objective นี้ได้ (แล้วไป retry รอบหน้า)
             return false
         end
 
-        -- 1) เปิดเมนูขายปกติ (เหมือนโค้ดเดิม)
-        local function openSellMenu()
-            local menu = gui:FindFirstChild("Menu")
-            if not menu or not menu:FindFirstChild("Frame") then
-                warn("   ❌ Menu GUI not found")
-                return false
-            end
+        print(string.format("Selected %s Dmg %.2f Quality %.1f", weakestWeapon.Type, weakestWeapon.Damage, weakestWeapon.Quality))
 
-            local bottomBar = menu.Frame:FindFirstChild("Frame")
-                and menu.Frame.Frame:FindFirstChild("BottomBar")
-            local buttons = bottomBar
-                and bottomBar:FindFirstChild("Buttons")
-                and bottomBar.Buttons:FindFirstChild("Buttons")
+        local basket = {}
+        basket[weakestWeapon.GUID] = true
 
-            local shopBtn = buttons and buttons:FindFirstChild("Shop")
-            if not shopBtn then
-                warn("   ❌ Shop button not found")
-                return false
-            end
-
-            print("   🖱️ Clicking Shop...")
-            VirtualClick(shopBtn)
-            task.wait(0.7)
-
-            return true
+        local proximity = Workspace:FindFirstChild("Proximity")
+        local npc = proximity and proximity:FindFirstChild(SELLCONFIG.NPCNAME) or proximity:FindFirstChild("Greedy Cey")
+        if not npc then
+            warn("NPC not found!")
+            return false
         end
-
-        -- 2) ดึงรายการอาวุธจาก backpack GUI (เหมือนเดิม แต่คืน “ลิสท์เรียงจาก weak → strong”)
-        local function getWeaponEntriesSorted()
-            local backpackGui = gui:FindFirstChild("BackpackGui")
-            local invFrame = backpackGui
-                and backpackGui:FindFirstChild("Main")
-                and backpackGui.Main:FindFirstChild("Frame")
-                and backpackGui.Main.Frame:FindFirstChild("Inventory")
-
-            local list = invFrame and invFrame:FindFirstChild("List")
-            if not list then
-                warn("   ❌ Inventory list not found")
-                return {}
-            end
-
-            local entries = {}
-            for _, item in ipairs(list:GetChildren()) do
-                if item:IsA("Frame") and item:FindFirstChild("ItemName") then
-                    local nameLabel = item.ItemName:FindFirstChild("TextLabel")
-                    local dmgLabel  = item:FindFirstChild("Damage")
-                        and item.Damage:FindFirstChild("TextLabel")
-
-                    local itemName = nameLabel and nameLabel.Text or ""
-                    local dmgStr   = dmgLabel and dmgLabel.Text or "0"
-                    local dmg      = tonumber(dmgStr:gsub("[^%d]", "")) or 0
-
-                    -- นับเฉพาะอาวุธที่ชื่ออยู่ใน WEAPON_TYPES
-                    local isWeapon = false
-                    for _, wt in ipairs(WEAPON_TYPES) do
-                        if itemName == wt then
-                            isWeapon = true
-                            break
-                        end
-                    end
-
-                    if isWeapon then
-                        table.insert(entries, {
-                            frame = item,
-                            name  = itemName,
-                            dmg   = dmg,
-                        })
-                    end
-                end
-            end
-
-            table.sort(entries, function(a, b)
-                if a.dmg == b.dmg then
-                    return a.name < b.name
-                end
-                return a.dmg < b.dmg     -- น้อยก่อน = อ่อนก่อน
-            end)
-
-            return entries
-        end
-
-        -- 3) พยายามขาย weapon ตามลำดับ entries ที่ส่งเข้า
-        local function trySellEntry(entry)
-            if not entry or not entry.frame or not entry.frame.Parent then
-                return false
-            end
-
-            print(string.format(
-                "   🗡️  Trying to sell: %s (DMG %d)",
-                entry.name,
-                entry.dmg
-            ))
-
-            -- คลิกเลือกแถวไอเทม
-            VirtualClick(entry.frame)
-            task.wait(0.3)
-
-            -- หา checkbox / ปุ่ม Sell ตาม UI เดิมของคุณ
-            local sellGui = gui:FindFirstChild("SellItemsGui") or gui:FindFirstChild("SellGui")
-            if not sellGui then
-                warn("   ❌ Sell GUI not found after selecting item")
-                return false
-            end
-
-            local main = sellGui:FindFirstChild("Main") or sellGui:FindFirstChild("Frame")
-            if not main then
-                warn("   ❌ Sell main frame not found")
-                return false
-            end
-
-            local sellButton = main:FindFirstChild("Sell") or main:FindFirstChild("Confirm")
-            if not sellButton then
-                warn("   ❌ Sell button not found")
-                return false
-            end
-
-            -- เช็กว่าปุ่มกดได้ไหม
-            local btn = sellButton:FindFirstChildOfClass("TextButton")
-                or sellButton:FindFirstChildOfClass("ImageButton")
-                or sellButton
-            if not btn or btn.Visible == false or btn.Active == false then
-                warn("   ⚠️ Sell button not active for this item")
-                return false
-            end
-
-            print("   💸 Clicking Sell...")
-            VirtualClick(btn)
-            task.wait(0.6)
-
-            -- เช็กว่าชิ้นนั้นหายไปจาก inventory แล้ว
-            local entriesAfter = getWeaponEntriesSorted()
-            local stillExists = false
-            for _, e in ipairs(entriesAfter) do
-                if e.name == entry.name and e.dmg == entry.dmg then
-                    stillExists = true
-                    break
-                end
-            end
-
-            if stillExists then
-                warn("   ⚠️ Item still exists after sell – treat as failed")
-                return false
-            end
-
-            print("   ✅ Sell success!")
-            return true
-        end
-
-        ----------------------------------------------------------------
-        -- MAIN FLOW
-        ----------------------------------------------------------------
-        if not openSellMenu() then
+        if not ProximityService or not DialogueService then
+            warn("Services not available!")
             return false
         end
 
-        local entries = getWeaponEntriesSorted()
-        if #entries == 0 then
-            warn("   ⚠️ No weapons to sell")
+        print("Opening dialogue...")
+        local success1 = pcall(function()
+            ProximityService:ForceDialogue(npc, "SellConfirm")
+        end)
+        if not success1 then
+            warn("Failed to open dialogue")
             return false
         end
 
-        -- 3.1 พยายามขาย weakest ก่อน
-        if trySellEntry(entries[1]) then
+        task.wait(0.2)
+        print("Selling weapon...")
+        local success2 = pcall(function()
+            DialogueService:RunCommand("SellConfirm", { Basket = basket })
+        end)
+
+        if success2 then
+            print("Sold successfully!")
+            task.wait(0.1)
+            forceRestoreState()
             return true
+        else
+            warn("Sell failed")
+            forceRestoreState()
+            return false
         end
-
-        -- 3.2 Fallback: ลองขายอันอื่นในลิสต์ จากอ่อน→เก่ง จนกว่าจะสำเร็จ
-        print("   🔄 Weakest sell failed, trying other weapons...")
-        for i = 2, #entries do
-            if trySellEntry(entries[i]) then
-                return true
-            end
-        end
-
-        warn("   ❌ Could not sell any weapon (all attempts failed)")
-        return false
     end
 
     
