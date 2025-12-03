@@ -1945,7 +1945,7 @@ local function RunQuest04()
     local Players = game:GetService("Players")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local Workspace = game:GetService("Workspace")
-    
+    local VirtualInputManager = game:GetService("VirtualInputManager")
     local player = Players.LocalPlayer
     local playerGui = player:WaitForChild("PlayerGui")
     
@@ -2016,6 +2016,18 @@ local function RunQuest04()
     if DialogueService then print("✅ DialogueService Ready!") else warn("⚠️ DialogueService not found") end
     if UIController then print("✅ UIController Ready!") else warn("⚠️ UIController not found") end
     
+
+    local function VirtualClick(guiObject)
+        if not guiObject then return end
+        local absPos = guiObject.AbsolutePosition
+        local absSize = guiObject.AbsoluteSize
+        local x = absPos.X + absSize.X/2
+        local y = absPos.Y + absSize.Y/2
+
+        VirtualInputManager:SendMouseButtonEvent(x, y, 0, true, guiObject, 0)
+        task.wait(0.05)
+        VirtualInputManager:SendMouseButtonEvent(x, y, 0, false, guiObject, 0)
+    end
     ----------------------------------------------------------------
     -- QUEST SYSTEM
     ----------------------------------------------------------------
