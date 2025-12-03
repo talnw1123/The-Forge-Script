@@ -867,12 +867,12 @@ local function RunQuest02()
             if State.moveConn then State.moveConn:Disconnect() State.moveConn = nil end
             if State.bodyVelocity then State.bodyVelocity:Destroy() State.bodyVelocity = nil end
             if State.bodyGyro then State.bodyGyro:Destroy() State.bodyGyro = nil end
-            SoftUnlockPosition()
+            
+            -- ✅ ไม่ SoftUnlock ที่นี่ ให้รอขุดก่อน
             print("   ✅ Reached starting position!")
             task.wait(0.3)
         else
             print("   ✅ Already near starting position!")
-            SoftUnlockPosition()
         end
         
         return true
@@ -978,22 +978,23 @@ local function RunQuest02()
     
     local function doMinePebbles()
         print("🪨 Objective: Mining Pebbles...")
-        
         print("\n" .. string.rep("-", 30))
         print("🚶 Step 1: Moving to starting position...")
         print(string.rep("-", 30))
+        
         moveToStartPosition()
         
         print("\n" .. string.rep("-", 30))
-        print("⛏️ Step 2: Starting mining loop...")
+        print("⛏️  Step 2: Starting mining loop...")
         print(string.rep("-", 30))
         
         while isQuest2StillActive() and not isCurrentObjectiveComplete() do
             local char = player.Character
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
-            if not hrp then 
-                task.wait(1) 
-                continue 
+            
+            if not hrp then
+                task.wait(1)
+                continue
             end
             
             cleanupState()
@@ -1011,18 +1012,69 @@ local function RunQuest02()
             
             local targetPos = getPebblePosition(targetPebble)
             local currentHP = getPebbleHP(targetPebble)
+            
             print(string.format("   🎯 Target: %s (dist: %d, HP: %d)", 
                 targetPebble.Parent.Name, math.floor(dist), currentHP))
             
             watchPebbleHP(targetPebble)
-            smoothMoveTo(targetPos, QUEST_CONFIG.STOP_DISTANCE)
+            
+            -- ✅ FIX: ถ้า pebble ใกล้เกินไป (< 3 studs) ให้ข้ามไป
+            if dist < 3 then
+                print("   ⚠️ Pebble too close to starting position, skipping...")
+                State.targetDestroyed = true
+                task.wait(1)
+                continue
+            end
+            
+            -- ✅ FIX: เพิ่ม STOP_DISTANCE เป็น 8 studs
+            local moveComplete = false
+            smoothMoveTo(targetPos, 8, function()
+                moveComplete = true
+            end)
+            
+            -- รอให้ movement เสร็จก่อน
+            local timeout = 10
+            local startTime = tick()
+            while not moveComplete and tick() - startTime < timeout do
+                if not hrp or not hrp.Parent then break end
+                local currentDist = (targetPos - hrp.Position).Magnitude
+                if currentDist <= 8 then
+                    moveComplete = true
+                    break
+                end
+                task.wait(0.1)
+            end
+            
+            -- ✅ FIX: หยุด movement ก่อน แล้วค่อย SoftLock
+            if State.moveConn then State.moveConn:Disconnect() State.moveConn = nil end
+            if State.bodyVelocity then 
+                State.bodyVelocity.Velocity = Vector3.zero
+                State.bodyVelocity:Destroy() 
+                State.bodyVelocity = nil 
+            end
+            if State.bodyGyro then State.bodyGyro:Destroy() State.bodyGyro = nil end
+            
+            task.wait(0.3)
+            
+            -- ✅ FIX: เช็คระยะก่อน SoftLock
+            local finalDist = (targetPos - hrp.Position).Magnitude
+            print(string.format("   📏 Final distance to pebble: %.1f studs", finalDist))
+            
+            if finalDist > 12 then
+                print("   ⚠️ Too far from pebble, retrying...")
+                State.targetDestroyed = true
+                continue
+            end
+            
+            -- ✅ SoftLock ที่ตำแหน่งปัจจุบัน (ไม่ใช่ starting position)
             SoftLockPosition(-2)
             
+            -- Mining loop
             while not State.targetDestroyed and isQuest2StillActive() and not isCurrentObjectiveComplete() do
                 if not targetPebble or not targetPebble.Parent then
                     print("   💥 Target removed!")
                     State.targetDestroyed = true
-                    SoftUnlockPosition()  
+                    SoftUnlockPosition()
                     break
                 end
                 
@@ -1030,7 +1082,7 @@ local function RunQuest02()
                     print("   ⚠️ Someone else mining!")
                     State.targetDestroyed = true
                     if ToolController then ToolController.holdingM1 = false end
-                    SoftUnlockPosition() 
+                    SoftUnlockPosition()
                     break
                 end
                 
@@ -1043,12 +1095,12 @@ local function RunQuest02()
                 if not isPickaxeHeld then
                     if ToolController then ToolController.holdingM1 = false end
                     local key = findPickaxeSlotKey()
-                    if key then 
-                        pressKey(key) 
+                    if key then
+                        pressKey(key)
                         task.wait(0.3)
-                    else 
+                    else
                         pcall(function() CHAR_RF:InvokeServer({Runes = {}, Name = QUEST_CONFIG.PICKAXE_NAME}) end)
-                        task.wait(0.5) 
+                        task.wait(0.5)
                     end
                 else
                     local pos = getPebblePosition(targetPebble)
@@ -1066,7 +1118,9 @@ local function RunQuest02()
                 
                 task.wait(0.15)
             end
+            
             SoftUnlockPosition()
+            
             if isCurrentObjectiveComplete() then
                 print("✅ Objective (Mine Pebbles) Complete!")
                 break
@@ -1077,7 +1131,7 @@ local function RunQuest02()
         end
         
         print("\n🛑 Mining ended")
-        SoftUnlockPosition() 
+        SoftUnlockPosition()
         cleanupState()
     end
     
