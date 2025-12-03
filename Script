@@ -1016,7 +1016,7 @@ local function RunQuest02()
             
             watchPebbleHP(targetPebble)
             smoothMoveTo(targetPos, QUEST_CONFIG.STOP_DISTANCE)
-            --SoftLockPosition(-2)
+            SoftLockPosition(-2)
             
             while not State.targetDestroyed and isQuest2StillActive() and not isCurrentObjectiveComplete() do
                 if not targetPebble or not targetPebble.Parent then
