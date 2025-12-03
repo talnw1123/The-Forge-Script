@@ -1,6 +1,5 @@
 repeat wait(2) until game:IsLoaded()
-task.wait(4)
-
+task.wait(9)
 -- bundled_quests_v4_original_linear.lua
 -- Auto Quest Runner (Original logic from 1.lua–18.lua)
 -- NOTE:
@@ -10,6 +9,56 @@ task.wait(4)
 
 local Players = game:GetService("Players")
 local player  = Players.LocalPlayer
+
+
+------------------------------------------------------------
+-- GLOBAL SOFT LOCK (กันตก map ตอนขุด/ตี)
+------------------------------------------------------------
+local SoftLockState = { conn = nil }
+
+local function SoftLockPosition(yOffset)
+    yOffset = yOffset or 0
+
+    if SoftLockState.conn then return end
+
+    local Players    = game:GetService("Players")
+    local RunService = game:GetService("RunService")
+    local player     = Players.LocalPlayer
+
+    local char = player.Character
+    local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    local basePos = hrp.Position
+
+    SoftLockState.conn = RunService.Heartbeat:Connect(function()
+        if not char or not char.Parent or not hrp or not hrp.Parent then
+            if SoftLockState.conn then
+                SoftLockState.conn:Disconnect()
+                SoftLockState.conn = nil
+            end
+            return
+        end
+
+        hrp.Velocity    = Vector3.zero
+        hrp.RotVelocity = Vector3.zero
+
+        local _, ry, rz = hrp.CFrame:ToEulerAnglesYXZ()
+        hrp.CFrame = CFrame.new(
+            basePos.X,
+            basePos.Y + yOffset,
+            basePos.Z
+        ) * CFrame.fromEulerAnglesYXZ(0, ry, rz)
+    end)
+end
+
+local function SoftUnlockPosition()
+    if SoftLockState.conn then
+        SoftLockState.conn:Disconnect()
+        SoftLockState.conn = nil
+    end
+end
+
 
 
 ----------------------------------------------------------------
@@ -32,7 +81,7 @@ local function RunQuest01()
     local QUEST_NAME = "Getting Started!"
     local NPC_NAME = "Sensei Moro"
     local QUEST_OPTION_ARG = "GiveIntroduction1"
-    local MOVE_SPEED = 50
+    local MOVE_SPEED = 20
     
     ----------------------------------------------------------------
     -- STATE MANAGEMENT
@@ -818,11 +867,12 @@ local function RunQuest02()
             if State.moveConn then State.moveConn:Disconnect() State.moveConn = nil end
             if State.bodyVelocity then State.bodyVelocity:Destroy() State.bodyVelocity = nil end
             if State.bodyGyro then State.bodyGyro:Destroy() State.bodyGyro = nil end
-            
+            SoftUnlockPosition()
             print("   ✅ Reached starting position!")
             task.wait(0.3)
         else
             print("   ✅ Already near starting position!")
+            SoftUnlockPosition()
         end
         
         return true
@@ -966,11 +1016,13 @@ local function RunQuest02()
             
             watchPebbleHP(targetPebble)
             smoothMoveTo(targetPos, QUEST_CONFIG.STOP_DISTANCE)
+            SoftLockPosition(-2)
             
             while not State.targetDestroyed and isQuest2StillActive() and not isCurrentObjectiveComplete() do
                 if not targetPebble or not targetPebble.Parent then
                     print("   💥 Target removed!")
                     State.targetDestroyed = true
+                    SoftUnlockPosition()  
                     break
                 end
                 
@@ -978,6 +1030,7 @@ local function RunQuest02()
                     print("   ⚠️ Someone else mining!")
                     State.targetDestroyed = true
                     if ToolController then ToolController.holdingM1 = false end
+                    SoftUnlockPosition() 
                     break
                 end
                 
@@ -1013,7 +1066,7 @@ local function RunQuest02()
                 
                 task.wait(0.15)
             end
-            
+            SoftUnlockPosition()
             if isCurrentObjectiveComplete() then
                 print("✅ Objective (Mine Pebbles) Complete!")
                 break
@@ -1024,6 +1077,7 @@ local function RunQuest02()
         end
         
         print("\n🛑 Mining ended")
+        SoftUnlockPosition() 
         cleanupState()
     end
     
@@ -2354,64 +2408,196 @@ local function RunQuest04()
         end
     end
     
+    ----------------------------------------------------------------
+    -- OBJECTIVE: Sell Weakest Weapon (with fallback)
+    ----------------------------------------------------------------
     local function doSellWeakestWeapon()
-        print("💰 Objective: Selling Weakest Weapon...")
-        
-        printWeaponsSummary()
-        
-        local weakestWeapon, errorMsg = findWeakestWeapon()
-        
-        if not weakestWeapon then
-            warn(string.format("   ❌ ERROR: %s", errorMsg))
+        print("💰 Objective: Sell Weakest Weapon (with fallback)...")
+
+        local gui = player:FindFirstChild("PlayerGui")
+        if not gui then
+            warn("   ❌ PlayerGui not found")
             return false
         end
-        
-        print(string.format("   🎯 Selected: %s (Dmg: %.2f | Quality: %.1f)", weakestWeapon.Type, weakestWeapon.Damage, weakestWeapon.Quality))
-        
-        local basket = {}
-        basket[weakestWeapon.GUID] = true
-        
-        local proximity = Workspace:FindFirstChild("Proximity")
-        local npc = proximity and (proximity:FindFirstChild(SELL_CONFIG.NPC_NAME) or proximity:FindFirstChild("Greedy Cey"))
-        
-        if not npc then
-            warn("   ❌ NPC not found!")
-            return false
-        end
-        
-        if not ProximityService or not DialogueService then
-            warn("   ❌ Services not available!")
-            return false
-        end
-        
-        print("   🔌 Opening dialogue...")
-        local success1 = pcall(function()
-            ProximityService:ForceDialogue(npc, "SellConfirm")
-        end)
-        
-        if not success1 then
-            warn("   ❌ Failed to open dialogue")
-            return false
-        end
-        
-        task.wait(0.2)
-        
-        print("   💸 Selling weapon...")
-        local success2 = pcall(function()
-            DialogueService:RunCommand("SellConfirm", { Basket = basket })
-        end)
-        
-        if success2 then
-            print("   ✅ Sold successfully!")
-            task.wait(0.1)
-            forceRestoreState()
+
+        -- 1) เปิดเมนูขายปกติ (เหมือนโค้ดเดิม)
+        local function openSellMenu()
+            local menu = gui:FindFirstChild("Menu")
+            if not menu or not menu:FindFirstChild("Frame") then
+                warn("   ❌ Menu GUI not found")
+                return false
+            end
+
+            local bottomBar = menu.Frame:FindFirstChild("Frame")
+                and menu.Frame.Frame:FindFirstChild("BottomBar")
+            local buttons = bottomBar
+                and bottomBar:FindFirstChild("Buttons")
+                and bottomBar.Buttons:FindFirstChild("Buttons")
+
+            local shopBtn = buttons and buttons:FindFirstChild("Shop")
+            if not shopBtn then
+                warn("   ❌ Shop button not found")
+                return false
+            end
+
+            print("   🖱️ Clicking Shop...")
+            VirtualClick(shopBtn)
+            task.wait(0.7)
+
             return true
-        else
-            warn("   ❌ Sell failed")
-            forceRestoreState()
+        end
+
+        -- 2) ดึงรายการอาวุธจาก backpack GUI (เหมือนเดิม แต่คืน “ลิสท์เรียงจาก weak → strong”)
+        local function getWeaponEntriesSorted()
+            local backpackGui = gui:FindFirstChild("BackpackGui")
+            local invFrame = backpackGui
+                and backpackGui:FindFirstChild("Main")
+                and backpackGui.Main:FindFirstChild("Frame")
+                and backpackGui.Main.Frame:FindFirstChild("Inventory")
+
+            local list = invFrame and invFrame:FindFirstChild("List")
+            if not list then
+                warn("   ❌ Inventory list not found")
+                return {}
+            end
+
+            local entries = {}
+            for _, item in ipairs(list:GetChildren()) do
+                if item:IsA("Frame") and item:FindFirstChild("ItemName") then
+                    local nameLabel = item.ItemName:FindFirstChild("TextLabel")
+                    local dmgLabel  = item:FindFirstChild("Damage")
+                        and item.Damage:FindFirstChild("TextLabel")
+
+                    local itemName = nameLabel and nameLabel.Text or ""
+                    local dmgStr   = dmgLabel and dmgLabel.Text or "0"
+                    local dmg      = tonumber(dmgStr:gsub("[^%d]", "")) or 0
+
+                    -- นับเฉพาะอาวุธที่ชื่ออยู่ใน WEAPON_TYPES
+                    local isWeapon = false
+                    for _, wt in ipairs(WEAPON_TYPES) do
+                        if itemName == wt then
+                            isWeapon = true
+                            break
+                        end
+                    end
+
+                    if isWeapon then
+                        table.insert(entries, {
+                            frame = item,
+                            name  = itemName,
+                            dmg   = dmg,
+                        })
+                    end
+                end
+            end
+
+            table.sort(entries, function(a, b)
+                if a.dmg == b.dmg then
+                    return a.name < b.name
+                end
+                return a.dmg < b.dmg     -- น้อยก่อน = อ่อนก่อน
+            end)
+
+            return entries
+        end
+
+        -- 3) พยายามขาย weapon ตามลำดับ entries ที่ส่งเข้า
+        local function trySellEntry(entry)
+            if not entry or not entry.frame or not entry.frame.Parent then
+                return false
+            end
+
+            print(string.format(
+                "   🗡️  Trying to sell: %s (DMG %d)",
+                entry.name,
+                entry.dmg
+            ))
+
+            -- คลิกเลือกแถวไอเทม
+            VirtualClick(entry.frame)
+            task.wait(0.3)
+
+            -- หา checkbox / ปุ่ม Sell ตาม UI เดิมของคุณ
+            local sellGui = gui:FindFirstChild("SellItemsGui") or gui:FindFirstChild("SellGui")
+            if not sellGui then
+                warn("   ❌ Sell GUI not found after selecting item")
+                return false
+            end
+
+            local main = sellGui:FindFirstChild("Main") or sellGui:FindFirstChild("Frame")
+            if not main then
+                warn("   ❌ Sell main frame not found")
+                return false
+            end
+
+            local sellButton = main:FindFirstChild("Sell") or main:FindFirstChild("Confirm")
+            if not sellButton then
+                warn("   ❌ Sell button not found")
+                return false
+            end
+
+            -- เช็กว่าปุ่มกดได้ไหม
+            local btn = sellButton:FindFirstChildOfClass("TextButton")
+                or sellButton:FindFirstChildOfClass("ImageButton")
+                or sellButton
+            if not btn or btn.Visible == false or btn.Active == false then
+                warn("   ⚠️ Sell button not active for this item")
+                return false
+            end
+
+            print("   💸 Clicking Sell...")
+            VirtualClick(btn)
+            task.wait(0.6)
+
+            -- เช็กว่าชิ้นนั้นหายไปจาก inventory แล้ว
+            local entriesAfter = getWeaponEntriesSorted()
+            local stillExists = false
+            for _, e in ipairs(entriesAfter) do
+                if e.name == entry.name and e.dmg == entry.dmg then
+                    stillExists = true
+                    break
+                end
+            end
+
+            if stillExists then
+                warn("   ⚠️ Item still exists after sell – treat as failed")
+                return false
+            end
+
+            print("   ✅ Sell success!")
+            return true
+        end
+
+        ----------------------------------------------------------------
+        -- MAIN FLOW
+        ----------------------------------------------------------------
+        if not openSellMenu() then
             return false
         end
+
+        local entries = getWeaponEntriesSorted()
+        if #entries == 0 then
+            warn("   ⚠️ No weapons to sell")
+            return false
+        end
+
+        -- 3.1 พยายามขาย weakest ก่อน
+        if trySellEntry(entries[1]) then
+            return true
+        end
+
+        -- 3.2 Fallback: ลองขายอันอื่นในลิสต์ จากอ่อน→เก่ง จนกว่าจะสำเร็จ
+        print("   🔄 Weakest sell failed, trying other weapons...")
+        for i = 2, #entries do
+            if trySellEntry(entries[i]) then
+                return true
+            end
+        end
+
+        warn("   ❌ Could not sell any weapon (all attempts failed)")
+        return false
     end
+
     
     ----------------------------------------------------------------
     -- 🔥 SMART QUEST RUNNER (Priority-based + Flexible)
@@ -2610,7 +2796,7 @@ local function RunQuest05()
         ZOMBIE_UNDERGROUND_OFFSET = 5,
         ZOMBIE_MAX_DISTANCE = 50,
         LAYING_ANGLE = 90,
-        MOVE_SPEED = 50,
+        MOVE_SPEED = 20,
         
         -- 🔥 NEW: Priority Order
         PRIORITY_ORDER = {
@@ -3152,11 +3338,7 @@ local function RunQuest05()
     end
     
     local function unlockPosition()
-        if State.positionLockConn then
-            State.positionLockConn:Disconnect()
-            State.positionLockConn = nil
-            print("   🔓 Position unlocked!")
-        end
+        SoftUnlockPosition()
     end
     
     ----------------------------------------------------------------
@@ -3487,6 +3669,7 @@ local function RunQuest05()
                 if not targetZombie or not targetZombie.Parent or not isZombieValid(targetZombie) then
                     print("   💀 Zombie died or removed!")
                     State.targetDestroyed = true
+                    unlockPosition() 
                     break
                 end
                 
@@ -3496,6 +3679,7 @@ local function RunQuest05()
                     if distToZombie > QUEST_CONFIG.ZOMBIE_MAX_DISTANCE then
                         print(string.format("   ⚠️ Zombie moved too far! (%.1f studs) Switching target...", distToZombie))
                         State.targetDestroyed = true
+                        unlockPosition()
                         break
                     end
                 end
@@ -3746,7 +3930,7 @@ local function RunQuest06()
         ITEM_TYPE = "Armor",
         FORGE_DELAY = 2,
         FORGE_POSITION = Vector3.new(-192.3, 29.5, 168.1),  -- 🆕 Fixed position
-        MOVE_SPEED = 50,
+        MOVE_SPEED = 20,
     }
     
     ----------------------------------------------------------------
@@ -4452,7 +4636,7 @@ local function RunQuest07()
         UNDERGROUND_OFFSET = 4,
         MIN_ORES_FOR_FORGE = 10,
         LAYING_ANGLE = 90,
-        MOVE_SPEED = 50,
+        MOVE_SPEED = 20,
         SELL_NPC_NAME = "Marbles",
         SELL_NPC_POSITION = Vector3.new(49.84, 29.17, 85.84),
         PRIORITY_ORDER = {"Purchase", "Kill", "Mine", "Forge"},
@@ -5890,6 +6074,7 @@ local function RunQuest07()
                 if not targetZombie or not targetZombie.Parent or not isZombieValid(targetZombie) then
                     print("   ⚠️ Target removed or died!")
                     State.targetDestroyed = true
+                    unlockPosition()  
                     break
                 end
                 
@@ -5899,6 +6084,7 @@ local function RunQuest07()
                     if distToZombie > QUEST_CONFIG.ZOMBIE_MAX_DISTANCE then
                         print(string.format("   ⚠️ Zombie moved too far! (%.1f studs) Switching target...", distToZombie))
                         State.targetDestroyed = true
+                        unlockPosition()
                         break
                     end
                 end
@@ -6217,7 +6403,7 @@ local function RunQuest08()
         QUEST_NAME = "Reporting In",
         NPC_NAME = "Sensei Moro",
         QUEST_OPTION_ARG = "CheckQuest",
-        MOVE_SPEED = 50,
+        MOVE_SPEED = 20,
         NPC_STOP_DISTANCE = 5,  -- หยุดห่างจาก NPC 5 studs
     }
     
@@ -7162,7 +7348,7 @@ local function RunQuest10()
         QUEST_NAME = "Runes of Power",
         NPC_NAME = "Runemaker",
         NPC_POSITION = Vector3.new(-271.7, 20.3, 141.9),
-        MOVE_SPEED = 50,
+        MOVE_SPEED = 20,
         NPC_STOP_DISTANCE = 5,
         
         -- Rune ที่ต้องการ (เลือกอันใดอันหนึ่ง)
@@ -7822,7 +8008,7 @@ local function RunQuest11()
         QUEST_NAME = "End of the Beginning",
         NPC_NAME = "Sensei Moro",
         QUEST_OPTION_ARG = "CheckQuest",
-        MOVE_SPEED = 50,
+        MOVE_SPEED = 20,
         NPC_STOP_DISTANCE = 5,
     }
     
@@ -8366,7 +8552,7 @@ local function RunQuest12()
         QUEST_NAME = "Everything starts now.",
         NPC_NAME = "Wizard",
         NPC_POSITION = Vector3.new(-24.1, 80.9, -358.5),
-        MOVE_SPEED = 50,
+        MOVE_SPEED = 20,
         NPC_STOP_DISTANCE = 5,
     }
     
@@ -8858,7 +9044,7 @@ local function RunQuest13()
         NPC_NAME = "Bard",
         NPC_POSITION = Vector3.new(-130.9, 27.8, 109.8),
         MIN_LEVEL = 10,  -- Level ต่ำสุดที่ต้องการ
-        MOVE_SPEED = 50,
+        MOVE_SPEED = 20,
         NPC_STOP_DISTANCE = 5,
     }
     
@@ -9445,7 +9631,7 @@ local function RunQuest14()
         NPC_NAME = "Bard",
         NPC_POSITION = Vector3.new(-130.9, 27.8, 109.8),
         
-        MOVE_SPEED = 50,
+        MOVE_SPEED = 20,
         STOP_DISTANCE = 5,
     }
     
@@ -10699,7 +10885,7 @@ local function RunQuest16()
         ITEM_NAME = "Stonewake's Pickaxe",
         ITEM_QUANTITY = 1,
         
-        MOVE_SPEED = 50,
+        MOVE_SPEED = 20,
         STOP_DISTANCE = 5,
     }
     
@@ -11141,7 +11327,7 @@ local function RunQuest17()
         
         UNDERGROUND_OFFSET = 4,
         LAYING_ANGLE = 90,
-        MOVE_SPEED = 50,
+        MOVE_SPEED = 20,
         
         -- Smooth Movement Settings
         HOLD_POSITION_AFTER_MINE = true,  -- ค้าง Position หลังขุดเสร็จ
