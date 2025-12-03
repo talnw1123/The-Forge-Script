@@ -1,5 +1,5 @@
 repeat wait(2) until game:IsLoaded()
-task.wait(9)
+task.wait(20)
 -- bundled_quests_v4_original_linear.lua
 -- Auto Quest Runner (Original logic from 1.lua–18.lua)
 -- NOTE:
@@ -2262,13 +2262,13 @@ local function RunQuest04()
             return nil, "No weapons found in inventory!"
         end
         
-        if #weapons <= SELL_CONFIG.KEEP_BEST_COUNT then
+        if #weapons <= SELLCONFIG.KEEPBESTCOUNT then  -- ✅ FIX: ใช้ SELLCONFIG (ไม่มี underscore)
             return nil, "Not enough weapons to sell!"
         end
         
         local equippedGUID = getEquippedWeaponGUID()
         
-        -- STEP 1: หา Weakest ที่ไม่ใช่ equipped
+        -- STEP 1: หา Weakest ที่ไม่ได้ equipped
         local weakestWeapon = nil
         for _, weapon in ipairs(weapons) do
             if weapon.GUID ~= equippedGUID then
@@ -2282,20 +2282,23 @@ local function RunQuest04()
             end
         end
         
-        -- STEP 2: ถ้าเจอ weakest ที่ไม่ใช่ equipped ให้ใช้ตัวนั้น
+        -- STEP 2: ถ้าเจอ weakest ที่ไม่ใช่ equipped → ใช้เลย
         if weakestWeapon then
             return weakestWeapon, nil
         end
         
-        -- STEP 3: FALLBACK - ถ้าหากว่า weakest ขายไม่ได้ (เพราะ equipped)
-        -- ให้หา Weapon อื่นที่ไม่ใช่ equipped อะไรก็ได้
+        -- ⚡ STEP 3: FALLBACK - ถ้า weakest ทุกอันถูก equipped
+        -- ให้หา weapon อื่นๆ ที่ไม่ได้ equip มาขายแทน (ไม่สนดาเมจ)
+        print("⚠️ [FALLBACK] Weakest weapon is equipped! Selecting any sellable weapon...")
         for _, weapon in ipairs(weapons) do
             if weapon.GUID ~= equippedGUID then
-                return weapon, nil  -- ขายตัวแรกที่เจอที่ไม่ใช่ equipped
+                print(string.format("   → Selected fallback: %s (Dmg: %.2f, Quality: %.1f)", 
+                    weapon.Type, weapon.Damage, weapon.Quality))
+                return weapon, nil
             end
         end
         
-        -- STEP 4: ถ้าไม่มี weapon อื่น ให้ return nil
+        -- STEP 4: ถ้าทุกอาวุธถูก equipped (ไม่น่าเกิด)
         return nil, "All weapons are equipped or no valid weapon to sell!"
     end
 
