@@ -1,5 +1,5 @@
 repeat wait(2) until game:IsLoaded()
-task.wait(9)
+task.wait(20)
 -- bundled_quests_v4_original_linear.lua
 -- Auto Quest Runner (Original logic from 1.lua–18.lua)
 -- NOTE:
