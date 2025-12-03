@@ -1,5 +1,5 @@
 repeat wait(2) until game:IsLoaded()
-task.wait(20)
+task.wait(9)
 -- bundled_quests_v4_original_linear.lua
 -- Auto Quest Runner (Original logic from 1.lua–18.lua)
 -- NOTE:
@@ -2261,13 +2261,15 @@ local function RunQuest04()
         if not weapons or #weapons == 0 then
             return nil, "No weapons found in inventory!"
         end
-        if #weapons <= SELLCONFIG.KEEPBESTCOUNT then
+        
+        if #weapons <= SELL_CONFIG.KEEP_BEST_COUNT then
             return nil, "Not enough weapons to sell!"
         end
-
+        
         local equippedGUID = getEquippedWeaponGUID()
+        
+        -- STEP 1: หา Weakest ที่ไม่ใช่ equipped
         local weakestWeapon = nil
-
         for _, weapon in ipairs(weapons) do
             if weapon.GUID ~= equippedGUID then
                 if not weakestWeapon then
@@ -2279,22 +2281,22 @@ local function RunQuest04()
                 end
             end
         end
-
-        -- Fallback: ถ้าไม่เจอ weakest ที่ไม่ใช่ชิ้นที่ใส่อยู่ ให้ขายชิ้นอื่นที่มีใน list
-        if not weakestWeapon then
-            for _, weapon in ipairs(weapons) do
-                if weapon.GUID ~= equippedGUID then
-                    weakestWeapon = weapon
-                    break
-                end
+        
+        -- STEP 2: ถ้าเจอ weakest ที่ไม่ใช่ equipped ให้ใช้ตัวนั้น
+        if weakestWeapon then
+            return weakestWeapon, nil
+        end
+        
+        -- STEP 3: FALLBACK - ถ้าหากว่า weakest ขายไม่ได้ (เพราะ equipped)
+        -- ให้หา Weapon อื่นที่ไม่ใช่ equipped อะไรก็ได้
+        for _, weapon in ipairs(weapons) do
+            if weapon.GUID ~= equippedGUID then
+                return weapon, nil  -- ขายตัวแรกที่เจอที่ไม่ใช่ equipped
             end
         end
-
-        if not weakestWeapon then
-            return nil, "All weapons are equipped or no valid weapon to sell!"
-        end
-
-        return weakestWeapon, nil
+        
+        -- STEP 4: ถ้าไม่มี weapon อื่น ให้ return nil
+        return nil, "All weapons are equipped or no valid weapon to sell!"
     end
 
     
@@ -2416,59 +2418,63 @@ local function RunQuest04()
     end
     
     local function doSellWeakestWeapon()
-        print("Objective Selling Weakest Weapon...")
+        print("💰 Objective: Selling Weakest Weapon...")
+        
         printWeaponsSummary()
-
+        
         local weakestWeapon, errorMsg = findWeakestWeapon()
+        
         if not weakestWeapon then
-            warn(string.format("ERROR %s", errorMsg))
-            -- ตรงนี้ให้ return true เพื่อให้ quest ข้าม objective นี้ได้ (แล้วไป retry รอบหน้า)
+            warn(string.format("   ❌ ERROR: %s", errorMsg))
             return false
         end
-
-        print(string.format("Selected %s Dmg %.2f Quality %.1f", weakestWeapon.Type, weakestWeapon.Damage, weakestWeapon.Quality))
-
+        
+        print(string.format("   🎯 Selected: %s (Dmg: %.2f | Quality: %.1f)", weakestWeapon.Type, weakestWeapon.Damage, weakestWeapon.Quality))
+        
         local basket = {}
         basket[weakestWeapon.GUID] = true
-
+        
         local proximity = Workspace:FindFirstChild("Proximity")
-        local npc = proximity and proximity:FindFirstChild(SELLCONFIG.NPCNAME) or proximity:FindFirstChild("Greedy Cey")
+        local npc = proximity and (proximity:FindFirstChild(SELL_CONFIG.NPC_NAME) or proximity:FindFirstChild("Greedy Cey"))
+        
         if not npc then
-            warn("NPC not found!")
+            warn("   ❌ NPC not found!")
             return false
         end
+        
         if not ProximityService or not DialogueService then
-            warn("Services not available!")
+            warn("   ❌ Services not available!")
             return false
         end
-
-        print("Opening dialogue...")
+        
+        print("   🔌 Opening dialogue...")
         local success1 = pcall(function()
             ProximityService:ForceDialogue(npc, "SellConfirm")
         end)
+        
         if not success1 then
-            warn("Failed to open dialogue")
+            warn("   ❌ Failed to open dialogue")
             return false
         end
-
+        
         task.wait(0.2)
-        print("Selling weapon...")
+        
+        print("   💸 Selling weapon...")
         local success2 = pcall(function()
             DialogueService:RunCommand("SellConfirm", { Basket = basket })
         end)
-
+        
         if success2 then
-            print("Sold successfully!")
+            print("   ✅ Sold successfully!")
             task.wait(0.1)
             forceRestoreState()
             return true
         else
-            warn("Sell failed")
+            warn("   ❌ Sell failed")
             forceRestoreState()
             return false
         end
     end
-
     
     ----------------------------------------------------------------
     -- 🔥 SMART QUEST RUNNER (Priority-based + Flexible)
