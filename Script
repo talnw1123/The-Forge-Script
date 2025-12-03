@@ -1,5 +1,5 @@
 repeat wait(2) until game:IsLoaded()
-task.wait(40)
+task.wait(20)
 -- bundled_quests_v4_original_linear.lua
 -- Auto Quest Runner (Original logic from 1.lua–18.lua)
 -- NOTE:
@@ -982,7 +982,7 @@ local function RunQuest02()
         print("\n" .. string.rep("-", 30))
         print("🚶 Step 1: Moving to starting position...")
         print(string.rep("-", 30))
-        moveToStartPosition()
+        --moveToStartPosition()
         
         print("\n" .. string.rep("-", 30))
         print("⛏️ Step 2: Starting mining loop...")
