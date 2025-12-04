@@ -7,9 +7,15 @@ task.wait(20)
 --   - ผมแค่ wrap เป็นฟังก์ชัน RunQuestXX() ไม่ได้แก้ logic ข้างใน
 --   - ด้านล่างมี Linear Runner ที่เรียก RunQuest01..RunQuest18 ต่อกัน
 
-local Players = game:GetService("Players")
-local player  = Players.LocalPlayer
+----------------------------------------------------------------
+-- ✅ WAIT FOR UI LEVEL TO LOAD (FIXED)
+----------------------------------------------------------------
+print("⏳ Waiting for UI to fully load...")
+print("   Checking for Player Level UI...")
 
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
 
 local function waitForLevelUI()
     local maxAttempts = 60  -- รอสูงสุด 60 ครั้ง (60 วินาที)
@@ -18,26 +24,54 @@ local function waitForLevelUI()
     while attempt < maxAttempts do
         attempt = attempt + 1
         
-        -- ✅ เช็ค UI Level path: PlayerGui.Main.Screen.Hud.Level
-        local levelUI = playerGui:FindFirstChild("Main") 
-            and playerGui.Main:FindFirstChild("Screen") 
-            and playerGui.Main.Screen:FindFirstChild("Hud")
-            and playerGui.Main.Screen.Hud:FindFirstChild("Level")
-        
-        if levelUI and levelUI:IsA("TextLabel") then
-            -- ✅ เช็คว่า UI มี Text หรือไม่
-            if levelUI.Text ~= "" and levelUI.Text ~= nil then
-                print(string.format("   ✅ Level UI found! (Attempt %d/%d)", attempt, maxAttempts))
-                print(string.format("   📊 Player Level: %s", levelUI.Text))
-                return true
-            else
-                print(string.format("   ⏳ Level UI found but empty... (Attempt %d/%d)", attempt, maxAttempts))
-            end
-        else
-            print(string.format("   ⏳ Waiting for Level UI... (Attempt %d/%d)", attempt, maxAttempts))
+        -- ✅ FIX: เช็ค nil แต่ละขั้นตอน
+        local main = playerGui:FindFirstChild("Main")
+        if not main then
+            print(string.format("   ⏳ Waiting for Main UI... (Attempt %d/%d)", attempt, maxAttempts))
+            task.wait(1)
+            continue
         end
         
-        task.wait(1)  -- รอ 1 วินาที แล้วลองใหม่
+        local screen = main:FindFirstChild("Screen")
+        if not screen then
+            print(string.format("   ⏳ Waiting for Screen UI... (Attempt %d/%d)", attempt, maxAttempts))
+            task.wait(1)
+            continue
+        end
+        
+        local hud = screen:FindFirstChild("Hud")
+        if not hud then
+            print(string.format("   ⏳ Waiting for Hud UI... (Attempt %d/%d)", attempt, maxAttempts))
+            task.wait(1)
+            continue
+        end
+        
+        local levelUI = hud:FindFirstChild("Level")
+        if not levelUI then
+            print(string.format("   ⏳ Waiting for Level UI... (Attempt %d/%d)", attempt, maxAttempts))
+            task.wait(1)
+            continue
+        end
+        
+        -- ✅ เช็คว่าเป็น TextLabel
+        if not levelUI:IsA("TextLabel") then
+            print(string.format("   ⚠️ Level UI is not TextLabel! (Attempt %d/%d)", attempt, maxAttempts))
+            task.wait(1)
+            continue
+        end
+        
+        -- ✅ เช็คว่ามี Text
+        local levelText = levelUI.Text or ""
+        if levelText == "" or levelText == nil then
+            print(string.format("   ⏳ Level UI found but empty... (Attempt %d/%d)", attempt, maxAttempts))
+            task.wait(1)
+            continue
+        end
+        
+        -- ✅ สำเร็จ!
+        print(string.format("   ✅ Level UI found! (Attempt %d/%d)", attempt, maxAttempts))
+        print(string.format("   📊 Player Level: %s", levelText))
+        return true
     end
     
     warn("❌ Failed to find Level UI after " .. maxAttempts .. " attempts!")
@@ -56,7 +90,7 @@ else
     print(string.rep("=", 60))
 end
 
-
+task.wait(1)  -- รอเพิ่มอีกนิดเพื่อความแน่ใจ
 
 ------------------------------------------------------------
 -- GLOBAL SOFT LOCK (กันตก map ตอนขุด/ตี)
