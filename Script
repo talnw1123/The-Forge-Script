@@ -522,7 +522,7 @@ local function RunQuest02()
         QUEST_NAME = "First Pickaxe!",
         PICKAXE_NAME = "Stone Pickaxe",
         MINING_START_POSITION = Vector3.new(43.203, -3.717, -106.628),
-        MOVE_SPEED = 50,
+        MOVE_SPEED = 20,
         STOP_DISTANCE = 6,
         
         -- 🔥 NEW: Priority Order
@@ -1405,7 +1405,7 @@ local function RunQuest03()
         ITEM_TYPE = "Weapon",
         FORGE_DELAY = 2,
         FORGE_POSITION = Vector3.new(-192.3, 29.5, 168.1),  -- 🆕 Fixed position
-        MOVE_SPEED = 50,
+        MOVE_SPEED = 30,
     }
     
     ----------------------------------------------------------------
