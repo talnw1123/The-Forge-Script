@@ -1588,31 +1588,31 @@ local function RunQuest03()
     -- NOCLIP & MOVEMENT
     ----------------------------------------------------------------
     local function enableNoclip()
-        -- if State.noclipConn then return end
+        if State.noclipConn then return end
         
-        -- local char = player.Character
-        -- if not char then return end
+        local char = player.Character
+        if not char then return end
         
-        -- State.noclipConn = RunService.Stepped:Connect(function()
-        --     if not char or not char.Parent then
-        --         if State.noclipConn then State.noclipConn:Disconnect() State.noclipConn = nil end
-        --         return
-        --     end
+        State.noclipConn = RunService.Stepped:Connect(function()
+            if not char or not char.Parent then
+                if State.noclipConn then State.noclipConn:Disconnect() State.noclipConn = nil end
+                return
+            end
             
-        --     for _, part in ipairs(char:GetDescendants()) do
-        --         if part:IsA("BasePart") then
-        --             part.CanCollide = false
-        --         end
-        --     end
-        -- end)
+            for _, part in ipairs(char:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = false
+                end
+            end
+        end)
     end
     
     local function disableNoclip()
-        -- if State.noclipConn then
-        --     State.noclipConn:Disconnect()
-        --     State.noclipConn = nil
-        -- end
-        -- -- ✅ ปิด noclip แล้วคืนการชนให้ตัวละคร
+        if State.noclipConn then
+            State.noclipConn:Disconnect()
+            State.noclipConn = nil
+        end
+        -- ✅ ปิด noclip แล้วคืนการชนให้ตัวละคร
         restoreCollisions()
     end
     
@@ -2037,7 +2037,7 @@ local function RunQuest03()
         return true
     end
     
-    
+
     local function startForge(oreSelection)
         print("   🔥 Starting Forge with:")
         for oreName, amount in pairs(oreSelection) do
