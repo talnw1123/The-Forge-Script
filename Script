@@ -11753,6 +11753,39 @@ local function RunQuest17()
         bodyGyro = nil,
     }
     
+    -- 🛡️ BLACKLIST for rocks that someone else is mining
+    -- Format: { [rockModel] = expireTime }
+    local OccupiedRocks = {}
+    local OCCUPIED_TIMEOUT = 10  -- ลบออกจาก blacklist หลัง 10 วินาที
+    
+    local function isRockOccupied(rock)
+        if not rock then return false end
+        local expireTime = OccupiedRocks[rock]
+        if not expireTime then return false end
+        
+        if tick() > expireTime then
+            -- หมดเวลา timeout → ลบออกจาก blacklist
+            OccupiedRocks[rock] = nil
+            return false
+        end
+        return true
+    end
+    
+    local function markRockAsOccupied(rock)
+        if not rock then return end
+        OccupiedRocks[rock] = tick() + OCCUPIED_TIMEOUT
+        print(string.format("   🚫 Added to blacklist for %d seconds: %s", OCCUPIED_TIMEOUT, rock.Name))
+    end
+    
+    local function cleanupExpiredBlacklist()
+        local now = tick()
+        for rock, expireTime in pairs(OccupiedRocks) do
+            if now > expireTime or not rock.Parent then
+                OccupiedRocks[rock] = nil
+            end
+        end
+    end
+    
     local function cleanupState()
         if State.hpWatchConn then State.hpWatchConn:Disconnect() State.hpWatchConn = nil end
         if State.noclipConn then State.noclipConn:Disconnect() State.noclipConn = nil end
@@ -11932,7 +11965,11 @@ local function RunQuest17()
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
         if not hrp then return nil end
         
+        -- ลบ rocks ที่หมดเวลา timeout ออกจาก blacklist
+        cleanupExpiredBlacklist()
+        
         local targetRock, minDist = nil, math.huge
+        local skippedOccupied = 0
         
         -- วน loop หาทุก Folder/Model ใน workspace.Rocks
         for _, folder in ipairs(MINING_FOLDER_PATH:GetChildren()) do
@@ -11943,21 +11980,30 @@ local function RunQuest17()
                         -- หา Boulder ใน SpawnLocation
                         local rock = child:FindFirstChild(QUEST_CONFIG.ROCK_NAME)
                         
-                        -- ข้าม Rock ที่เพิ่งขุดเสร็จ
-                        if rock ~= excludeRock and isTargetValid(rock) then
-                            local pos = getRockUndergroundPosition(rock)
-                            if pos then
-                                local dist = (pos - hrp.Position).Magnitude
-                                
-                                if dist < minDist then
-                                    minDist = dist
-                                    targetRock = rock
+                        -- ข้าม Rock ที่เพิ่งขุดเสร็จ หรืออยู่ใน blacklist
+                        if rock and rock ~= excludeRock and isTargetValid(rock) then
+                            -- 🛡️ เช็ค blacklist
+                            if isRockOccupied(rock) then
+                                skippedOccupied = skippedOccupied + 1
+                            else
+                                local pos = getRockUndergroundPosition(rock)
+                                if pos then
+                                    local dist = (pos - hrp.Position).Magnitude
+                                    
+                                    if dist < minDist then
+                                        minDist = dist
+                                        targetRock = rock
+                                    end
                                 end
                             end
                         end
                     end
                 end
             end
+        end
+        
+        if skippedOccupied > 0 then
+            print(string.format("   ⏭️ Skipped %d occupied rocks (blacklisted)", skippedOccupied))
         end
         
         return targetRock, minDist
@@ -12256,6 +12302,8 @@ local function RunQuest17()
                 
                 if checkMiningError() then
                     print("   ⚠️ Someone else mining! Switching target...")
+                    -- 🛡️ เพิ่ม rock นี้เข้า blacklist เพื่อไม่ให้กลับมาขุดซ้ำ
+                    markRockAsOccupied(targetRock)
                     State.targetDestroyed = true
                     if ToolController then
                         ToolController.holdingM1 = false
@@ -12578,6 +12626,39 @@ local function RunQuest18()
         autoBuyTask = nil,
         isPaused = false,
     }
+    
+    -- 🛡️ BLACKLIST for rocks that someone else is mining
+    -- Format: { [rockModel] = expireTime }
+    local OccupiedRocks = {}
+    local OCCUPIED_TIMEOUT = 10  -- ลบออกจาก blacklist หลัง 10 วินาที
+    
+    local function isRockOccupied(rock)
+        if not rock then return false end
+        local expireTime = OccupiedRocks[rock]
+        if not expireTime then return false end
+        
+        if tick() > expireTime then
+            -- หมดเวลา timeout → ลบออกจาก blacklist
+            OccupiedRocks[rock] = nil
+            return false
+        end
+        return true
+    end
+    
+    local function markRockAsOccupied(rock)
+        if not rock then return end
+        OccupiedRocks[rock] = tick() + OCCUPIED_TIMEOUT
+        print(string.format("   🚫 Added to blacklist for %d seconds: %s", OCCUPIED_TIMEOUT, rock.Name))
+    end
+    
+    local function cleanupExpiredBlacklist()
+        local now = tick()
+        for rock, expireTime in pairs(OccupiedRocks) do
+            if now > expireTime or not rock.Parent then
+                OccupiedRocks[rock] = nil
+            end
+        end
+    end
     
     local AutoSellInitialized = false
     
@@ -13420,7 +13501,11 @@ local function RunQuest18()
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
         if not hrp then return nil end
         
+        -- ลบ rocks ที่หมดเวลา timeout ออกจาก blacklist
+        cleanupExpiredBlacklist()
+        
         local targetRock, minDist = nil, math.huge
+        local skippedOccupied = 0
         
         for _, pathName in ipairs(QUEST_CONFIG.MINING_PATHS) do
             local folder = MINING_FOLDER_PATH:FindFirstChild(pathName)
@@ -13430,20 +13515,29 @@ local function RunQuest18()
                     if child:IsA("SpawnLocation") or child.Name == "SpawnLocation" then
                         local rock = child:FindFirstChild(QUEST_CONFIG.ROCK_NAME)
                         
-                        if rock ~= excludeRock and isTargetValid(rock) then
-                            local pos = getRockUndergroundPosition(rock)
-                            if pos then
-                                local dist = (pos - hrp.Position).Magnitude
-                                
-                                if dist < minDist then
-                                    minDist = dist
-                                    targetRock = rock
+                        if rock and rock ~= excludeRock and isTargetValid(rock) then
+                            -- 🛡️ เช็ค blacklist
+                            if isRockOccupied(rock) then
+                                skippedOccupied = skippedOccupied + 1
+                            else
+                                local pos = getRockUndergroundPosition(rock)
+                                if pos then
+                                    local dist = (pos - hrp.Position).Magnitude
+                                    
+                                    if dist < minDist then
+                                        minDist = dist
+                                        targetRock = rock
+                                    end
                                 end
                             end
                         end
                     end
                 end
             end
+        end
+        
+        if skippedOccupied > 0 then
+            print(string.format("   ⏭️ Skipped %d occupied rocks (blacklisted)", skippedOccupied))
         end
         
         return targetRock, minDist
@@ -13599,6 +13693,9 @@ local function RunQuest18()
                 end
                 
                 if checkMiningError() then
+                    print("   ⚠️ Someone else mining! Switching target...")
+                    -- 🛡️ เพิ่ม rock นี้เข้า blacklist เพื่อไม่ให้กลับมาขุดซ้ำ
+                    markRockAsOccupied(targetRock)
                     State.targetDestroyed = true
                     if ToolController then
                         ToolController.holdingM1 = false
