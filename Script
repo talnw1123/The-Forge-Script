@@ -1588,103 +1588,89 @@ local function RunQuest03()
     -- NOCLIP & MOVEMENT
     ----------------------------------------------------------------
     local function enableNoclip()
-        if State.noclipConn then return end
+        -- if State.noclipConn then return end
         
-        local char = player.Character
-        if not char then return end
+        -- local char = player.Character
+        -- if not char then return end
         
-        State.noclipConn = RunService.Stepped:Connect(function()
-            if not char or not char.Parent then
-                if State.noclipConn then State.noclipConn:Disconnect() State.noclipConn = nil end
-                return
-            end
+        -- State.noclipConn = RunService.Stepped:Connect(function()
+        --     if not char or not char.Parent then
+        --         if State.noclipConn then State.noclipConn:Disconnect() State.noclipConn = nil end
+        --         return
+        --     end
             
-            for _, part in ipairs(char:GetDescendants()) do
-                if part:IsA("BasePart") then
-                    part.CanCollide = false
-                end
-            end
-        end)
+        --     for _, part in ipairs(char:GetDescendants()) do
+        --         if part:IsA("BasePart") then
+        --             part.CanCollide = false
+        --         end
+        --     end
+        -- end)
     end
     
     local function disableNoclip()
-        if State.noclipConn then
-            State.noclipConn:Disconnect()
-            State.noclipConn = nil
-        end
-        -- ✅ ปิด noclip แล้วคืนการชนให้ตัวละคร
+        -- if State.noclipConn then
+        --     State.noclipConn:Disconnect()
+        --     State.noclipConn = nil
+        -- end
+        -- -- ✅ ปิด noclip แล้วคืนการชนให้ตัวละคร
         restoreCollisions()
     end
     
     -- 🆕 smoothMoveTo with BodyVelocity + BodyGyro
     local function smoothMoveTo(targetPos, callback)
         local char = player.Character
+        local humanoid = char and char:FindFirstChildOfClass("Humanoid")
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
-        if not hrp then return false end
-        
-        -- Cleanup previous movement
-        if State.moveConn then State.moveConn:Disconnect() State.moveConn = nil end
-        if State.bodyVelocity then State.bodyVelocity:Destroy() State.bodyVelocity = nil end
-        if State.bodyGyro then State.bodyGyro:Destroy() State.bodyGyro = nil end
-        
-        -- Enable noclip
-        enableNoclip()
-        
-        -- Create BodyVelocity
-        local bv = Instance.new("BodyVelocity")
-        bv.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-        bv.Parent = hrp
-        State.bodyVelocity = bv
-        
-        -- Create BodyGyro
-        local bg = Instance.new("BodyGyro")
-        bg.MaxTorque = Vector3.new(math.huge, math.huge, math.huge)
-        bg.P = 10000
-        bg.D = 500
-        bg.Parent = hrp
-        State.bodyGyro = bg
-        
-        print(string.format("   🚀 Moving to (%.1f, %.1f, %.1f)...", targetPos.X, targetPos.Y, targetPos.Z))
-        
-        State.moveConn = RunService.Heartbeat:Connect(function()
-            if not char or not char.Parent or not hrp or not hrp.Parent then
-                if State.moveConn then State.moveConn:Disconnect() State.moveConn = nil end
-                if bv then bv:Destroy() end
-                if bg then bg:Destroy() end
-                State.bodyVelocity = nil
-                State.bodyGyro = nil
-                return
+        if not (char and humanoid and hrp) then
+            warn("[Quest3] smoothMoveTo: character/humanoid/hrp missing")
+            return false
+        end
+
+        -- เคลียร์ state เก่า ๆ เผื่อมี BodyVelocity/connection หลงเหลือ
+        cleanupState()
+        disableNoclip()
+
+        print(string.format(
+            "   🚶 (MoveTo) Moving to Forge at (%.1f, %.1f, %.1f)...",
+            targetPos.X, targetPos.Y, targetPos.Z
+        ))
+
+        local finished = false
+        local conn
+        conn = humanoid.MoveToFinished:Connect(function(reached)
+            finished = reached
+            if conn then
+                conn:Disconnect()
+                conn = nil
             end
-            
-            local currentPos = hrp.Position
-            local direction = (targetPos - currentPos)
-            local distance = direction.Magnitude
-            
-            if distance < 2 then
-                print("   ✅ Reached target!")
-                
-                bv.Velocity = Vector3.zero
-                task.wait(0.1)
-                
-                bv:Destroy()
-                bg:Destroy()
-                State.bodyVelocity = nil
-                State.bodyGyro = nil
-                
-                if State.moveConn then State.moveConn:Disconnect() State.moveConn = nil end
-                
-                if callback then callback() end
-                return
-            end
-            
-            local speed = math.min(FORGE_CONFIG.MOVE_SPEED, distance * 10)
-            local velocity = direction.Unit * speed
-            
-            bv.Velocity = velocity
-            bg.CFrame = CFrame.lookAt(currentPos, targetPos)
         end)
-        
-        return true
+
+        humanoid:MoveTo(targetPos)
+
+        local timeout = 20
+        local startTime = tick()
+
+        while not finished and (tick() - startTime) < timeout and Quest3Active do
+            task.wait(0.1)
+        end
+
+        if conn then
+            conn:Disconnect()
+            conn = nil
+        end
+
+        if finished then
+            print("   ✅ (MoveTo) Reached target!")
+        else
+            warn("   ⚠️ (MoveTo) Timeout / failed to reach target")
+        end
+
+        if callback then
+            -- callback เดิมจะไป set flag ว่าถึง forge แล้ว
+            callback()
+        end
+
+        return finished
     end
     
     ----------------------------------------------------------------
