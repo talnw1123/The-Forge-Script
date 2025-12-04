@@ -11619,6 +11619,21 @@ local function RunQuest16()
             return
         end
         
+        print("   ❌ Don't have pickaxe yet – proceeding to purchase...")
+        
+        -- 🛒 ไปซื้อ Pickaxe!
+        local buySuccess = doBuyPickaxe()
+        
+        if buySuccess then
+            print("\n" .. string.rep("=", 50))
+            print("✅ Quest 16 Complete! Pickaxe purchased successfully!")
+            print(string.rep("=", 50))
+        else
+            warn("\n" .. string.rep("=", 50))
+            warn("❌ Quest 16 Failed! Could not purchase pickaxe.")
+            warn(string.rep("=", 50))
+        end
+        
         Quest16Active = false
         cleanupState()
         disableNoclip()
