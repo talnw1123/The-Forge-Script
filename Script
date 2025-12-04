@@ -11183,6 +11183,42 @@ local function RunQuest16()
         if State.bodyGyro then State.bodyGyro:Destroy() State.bodyGyro = nil end
     end
     
+
+    local function getPlayerLevel()
+        print("   🔍 Checking player level...")
+
+        -- Path: PlayerGui.Main.Screen.Hud.Level
+        local levelLabel = playerGui:FindFirstChild("Main")
+                        and playerGui.Main:FindFirstChild("Screen")
+                        and playerGui.Main.Screen:FindFirstChild("Hud")
+                        and playerGui.Main.Screen.Hud:FindFirstChild("Level")
+
+        if not levelLabel then
+            warn("   ❌ Level Label not found!")
+            warn("   💡 Path: PlayerGui.Main.Screen.Hud.Level")
+            return nil
+        end
+
+        if not levelLabel:IsA("TextLabel") then
+            warn("   ❌ Level is not a TextLabel!")
+            return nil
+        end
+
+        local levelText = levelLabel.Text
+        print(string.format("   📊 Level Text: '%s'", levelText))
+
+        -- ดึงตัวเลขจากข้อความ เช่น "Level 7" -> 7
+        local level = tonumber(string.match(levelText, "%d+"))
+        if level then
+            print(string.format("   ✅ Player Level: %d", level))
+            return level
+        else
+            warn("   ❌ Failed to parse level from text!")
+            return nil
+        end
+    end
+
+    
     ----------------------------------------------------------------
     -- GOLD SYSTEM
     ----------------------------------------------------------------
@@ -11483,17 +11519,44 @@ local function RunQuest16()
         print(string.format("✅ Strategy: Check Gold → Move to Shop → Purchase"))
         print(string.rep("=", 50))
         
-        -- เช็ค Gold ก่อน
-        print("\n🔍 Pre-check: Verifying gold requirement...")
-        if not hasEnoughGold() then
-            print("\n❌ Not enough gold (Need >= $" .. QUEST_CONFIG.MIN_GOLD .. ")")
+    ----------------------------------------------------------------
+    -- PRE-CHECK: Gold >= 3340 AND Level < 10
+    ----------------------------------------------------------------
+        print("\n🔍 Pre-check: Verifying gold and level requirement...")
+
+        -- 1) เช็ค Gold >= MIN_GOLD
+        local goldOk = hasEnoughGold()
+
+        -- 2) เช็ค Level < 10
+        local level = getPlayerLevel()
+        if not level then
+            warn("\n❌ Cannot determine player level – skipping Quest 16")
             print(string.rep("=", 50))
             cleanupState()
             disableNoclip()
             return
         end
+
+        if (not goldOk) or level >= 10 then
+            print(string.format(
+                "\n❌ Condition not met (Gold ≥ %d AND Level < 10). Current: GoldOK=%s, Level=%d",
+                QUEST_CONFIG.MIN_GOLD,
+                tostring(goldOk),
+                level
+            ))
+            print(string.rep("=", 50))
+            cleanupState()
+            disableNoclip()
+            return
+        end
+
+        print(string.format(
+            "   ✅ Condition passed! Gold ≥ %d AND Level < 10 (Level = %d)",
+            QUEST_CONFIG.MIN_GOLD,
+            level
+        ))
         
-        -- เช็คว่ามี Pickaxe แล้วหรือยัง
+                -- เช็คว่ามี Pickaxe แล้วหรือยัง
         print("\n🔍 Pre-check: Checking if already have pickaxe...")
         if hasPickaxe(QUEST_CONFIG.ITEM_NAME) then
             print("\n✅ Already have the pickaxe!")
@@ -11502,31 +11565,6 @@ local function RunQuest16()
             disableNoclip()
             return
         end
-        
-        -- ถ้ามี Gold พอ และยังไม่มี Pickaxe ให้ซื้อ
-        local maxAttempts = 3
-        local attempt = 0
-        
-        while Quest16Active and attempt < maxAttempts do
-            attempt = attempt + 1
-            print(string.format("\n🔄 Attempt #%d", attempt))
-            
-            local success = doBuyPickaxe()
-            
-            if success then
-                print("\n✅ Purchase complete!")
-                break
-            else
-                warn("\n❌ Purchase failed, retrying in 3s...")
-                task.wait(3)
-            end
-        end
-        
-        task.wait(1)
-        
-        print("\n" .. string.rep("=", 50))
-        print("✅ Quest 16 Complete!")
-        print(string.rep("=", 50))
         
         Quest16Active = false
         cleanupState()
