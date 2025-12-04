@@ -12376,7 +12376,7 @@ local function RunQuest18()
         },
         
         WAYPOINT_STOP_DISTANCE = 5,
-        MAX_ROCKS_TO_MINE = 10,
+        MAX_ROCKS_TO_MINE = 99999999999999,
         HOLD_POSITION_AFTER_MINE = true,
     }
     
