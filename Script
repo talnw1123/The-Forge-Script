@@ -3988,6 +3988,15 @@ local function RunQuest05()
         end
         print(string.rep("=", 50))
         
+        local function hasIncompletePurchase()
+            for _, obj in ipairs(objectives) do
+                if obj.type == "Purchase" and not isObjectiveComplete(obj.frame) then
+                    return true
+                end
+            end
+            return false
+        end
+        
         -- 🔥 Main loop: Process objectives by priority
         local maxAttempts = 10
         local attempt = 0
@@ -3998,6 +4007,7 @@ local function RunQuest05()
             
             local allComplete = true
             local didSomething = false
+            local purchasePending = hasIncompletePurchase()
             
             for _, obj in ipairs(objectives) do
                 if not isQuest5StillActive() then
@@ -4009,6 +4019,12 @@ local function RunQuest05()
                 
                 if not complete then
                     allComplete = false
+
+                    -- ⛔ ถ้ายังมี Purchase ที่ไม่เสร็จ → ห้ามทำ objective อื่น
+                    if purchasePending and obj.type ~= "Purchase" then
+                        print(string.format("   ⏭️  Skipping [%s] (waiting for Purchase to finish)", obj.type))
+                        continue
+                    end
                     
                     -- 🔥 Check if we can do this objective now
                     if not canDoObjective(obj.type) then
@@ -5366,6 +5382,7 @@ local function RunQuest07()
         local targetZombie, minDist = nil, math.huge
         
         for _, child in ipairs(LIVING_FOLDER:GetChildren()) do
+            -- ✅ เอาเฉพาะชื่อแนว "Zombie1234" เท่านั้น (ไม่เอา EliteZombie)
             if string.match(child.Name, "^Zombie%d+$") then
                 if isZombieValid(child) then
                     local pos = getZombieUndergroundPosition(child)
@@ -5382,6 +5399,7 @@ local function RunQuest07()
         
         return targetZombie, minDist
     end
+
     
     local function watchZombieHP(zombie)
         if State.hpWatchConn then State.hpWatchConn:Disconnect() end
@@ -5947,54 +5965,55 @@ local function RunQuest07()
         local char = player.Character
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
         if not hrp then return false end
-        
+
         local forgePos = QUEST_CONFIG.FORGE_POSITION
         local currentDist = (forgePos - hrp.Position).Magnitude
-        
+
         print(string.format("🚶 Moving to Forge at (%.1f, %.1f, %.1f) (%.1f studs away)...", 
             forgePos.X, forgePos.Y, forgePos.Z, currentDist))
-        
+
         local moveComplete = false
         smoothMoveTo(forgePos, function()
             moveComplete = true
         end)
-        
+
         local timeout = 15
         local startTime = tick()
         while not moveComplete and tick() - startTime < timeout do
             task.wait(0.1)
         end
-        
+
         if State.moveConn then State.moveConn:Disconnect() State.moveConn = nil end
         if State.bodyVelocity then State.bodyVelocity:Destroy() State.bodyVelocity = nil end
         if State.bodyGyro then State.bodyGyro:Destroy() State.bodyGyro = nil end
-        
+
         print("✅ Reached Forge!")
         print("   ⏳ Waiting 1.5s before opening Forge UI...")
         task.wait(1.5)
-        
+
         return true
     end
+
     
     local function startForge(oreSelection)
         print("🔨 Starting Forge with:")
         for oreName, amount in pairs(oreSelection) do
             print(string.format("   - %s x%d", oreName, amount))
         end
-        
+
         if not FORGE_OBJECT then
             warn("❌ Forge Object not found!")
             return false
         end
-        
+
         pcall(function()
             PROXIMITY_RF:InvokeServer(FORGE_OBJECT)
         end)
-        
+
         task.wait(1)
-        
+
         if not ForgeService then return false end
-        
+
         local forgeSuccess = pcall(function()
             ForgeService:ChangeSequence("Melt", {
                 Ores = oreSelection,
@@ -6002,7 +6021,7 @@ local function RunQuest07()
                 FastForge = false
             })
         end)
-        
+
         if forgeSuccess then
             print("✅ Forge Melt started!")
             return true
@@ -6010,7 +6029,6 @@ local function RunQuest07()
             return false
         end
     end
-    
     ----------------------------------------------------------------
     -- OBJECTIVES
     ----------------------------------------------------------------
@@ -6253,8 +6271,12 @@ local function RunQuest07()
                 task.wait(0.1)
             end
             
+            -- ❌ อย่า hard-lock ถ้าไม่เคยเดินถึงเป้าหมาย
             if not moveStarted then
-                lockPositionFollowTarget(targetZombie)
+                warn("   ⚠️ Move timeout, skip this zombie to avoid teleport")
+                State.targetDestroyed = true
+                unlockPosition()
+                continue
             end
             
             task.wait(0.5)
@@ -6465,6 +6487,17 @@ local function RunQuest07()
         end
         print(string.rep("=", 50))
         
+
+        -- 🆕 helper: เช็คว่ามี Purchase ที่ยังไม่ complete อยู่ไหม
+        local function hasIncompletePurchase()
+            for _, obj in ipairs(objectives) do
+                if obj.type == "Purchase" and not isObjectiveComplete(obj.frame) then
+                    return true
+                end
+            end
+            return false
+        end
+        
         local maxAttempts = 10
         local attempt = 0
         
@@ -6474,6 +6507,7 @@ local function RunQuest07()
             
             local allComplete = true
             local didSomething = false
+            local purchasePending = hasIncompletePurchase()
             
             for _, obj in ipairs(objectives) do
                 if not isQuest7StillActive() then
@@ -6485,6 +6519,12 @@ local function RunQuest07()
                 
                 if not complete then
                     allComplete = false
+
+                    -- ⛔ ถ้า Purchase ยังไม่เสร็จ → ห้ามทำ Kill / Mine / Forge
+                    if purchasePending and obj.type ~= "Purchase" then
+                        print(string.format("⏭️  Skipping [%s] (waiting for Purchase to finish)", obj.type))
+                        continue
+                    end
                     
                     if not canDoObjective(obj.type) then
                         print(string.format("⏸️  Skipping [%s] - Cannot do right now", obj.type))
@@ -12072,7 +12112,10 @@ local function RunQuest17()
                 end
                 
                 if not moveStarted then
-                    lockPositionLayingDown(targetPos)
+                    warn("   ⚠️ Move timeout, skip this zombie to avoid teleport")
+                    State.targetDestroyed = true
+                    unlockPosition()
+                    continue
                 end
             end
             
@@ -13377,7 +13420,10 @@ local function RunQuest18()
                 end
                 
                 if not moveStarted then
-                    lockPositionLayingDown(targetPos)
+                    warn("   ⚠️ Move timeout, skip this zombie to avoid teleport")
+                    State.targetDestroyed = true
+                    unlockPosition()
+                    continue
                 end
             end
             
@@ -13584,6 +13630,9 @@ end
 ----------------------------------------------------------------
 -- AUTO RUNNER
 ----------------------------------------------------------------
+
+local ENABLE_LINEAR_RUNNER = false      -- ❌ ปิดการรันทุกเควสต่อกัน
+local SINGLE_QUEST_ID = 18              -- ✅ อยากเทสเควสไหน ใส่เลข id ตรงนี้
 
 local QUEST_DELAY_BETWEEN = 1.5
 
