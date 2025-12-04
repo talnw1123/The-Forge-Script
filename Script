@@ -162,7 +162,7 @@ local function RunQuest01()
     local QUEST_NAME = "Getting Started!"
     local NPC_NAME = "Sensei Moro"
     local QUEST_OPTION_ARG = "GiveIntroduction1"
-    local MOVE_SPEED = 20
+    local MOVE_SPEED = 10
     
     ----------------------------------------------------------------
     -- STATE MANAGEMENT
@@ -522,7 +522,7 @@ local function RunQuest02()
         QUEST_NAME = "First Pickaxe!",
         PICKAXE_NAME = "Stone Pickaxe",
         MINING_START_POSITION = Vector3.new(43.203, -3.717, -106.628),
-        MOVE_SPEED = 20,
+        MOVE_SPEED = 10,
         STOP_DISTANCE = 6,
         
         -- 🔥 NEW: Priority Order
@@ -1405,7 +1405,7 @@ local function RunQuest03()
         ITEM_TYPE = "Weapon",
         FORGE_DELAY = 2,
         FORGE_POSITION = Vector3.new(-192.3, 29.5, 168.1),  -- 🆕 Fixed position
-        MOVE_SPEED = 30,
+        MOVE_SPEED = 10,
     }
     
     ----------------------------------------------------------------
@@ -2875,7 +2875,7 @@ local function RunQuest05()
         ZOMBIE_UNDERGROUND_OFFSET = 5,
         ZOMBIE_MAX_DISTANCE = 50,
         LAYING_ANGLE = 90,
-        MOVE_SPEED = 20,
+        MOVE_SPEED = 10,
         
         -- 🔥 NEW: Priority Order
         PRIORITY_ORDER = {
@@ -4009,7 +4009,7 @@ local function RunQuest06()
         ITEM_TYPE = "Armor",
         FORGE_DELAY = 2,
         FORGE_POSITION = Vector3.new(-192.3, 29.5, 168.1),  -- 🆕 Fixed position
-        MOVE_SPEED = 20,
+        MOVE_SPEED = 10,
     }
     
     ----------------------------------------------------------------
@@ -4715,7 +4715,7 @@ local function RunQuest07()
         UNDERGROUND_OFFSET = 4,
         MIN_ORES_FOR_FORGE = 10,
         LAYING_ANGLE = 90,
-        MOVE_SPEED = 20,
+        MOVE_SPEED = 10,
         SELL_NPC_NAME = "Marbles",
         SELL_NPC_POSITION = Vector3.new(49.84, 29.17, 85.84),
         PRIORITY_ORDER = {"Purchase", "Kill", "Mine", "Forge"},
@@ -6482,7 +6482,7 @@ local function RunQuest08()
         QUEST_NAME = "Reporting In",
         NPC_NAME = "Sensei Moro",
         QUEST_OPTION_ARG = "CheckQuest",
-        MOVE_SPEED = 20,
+        MOVE_SPEED = 10,
         NPC_STOP_DISTANCE = 5,  -- หยุดห่างจาก NPC 5 studs
     }
     
@@ -7427,7 +7427,7 @@ local function RunQuest10()
         QUEST_NAME = "Runes of Power",
         NPC_NAME = "Runemaker",
         NPC_POSITION = Vector3.new(-271.7, 20.3, 141.9),
-        MOVE_SPEED = 20,
+        MOVE_SPEED = 10,
         NPC_STOP_DISTANCE = 5,
         
         -- Rune ที่ต้องการ (เลือกอันใดอันหนึ่ง)
@@ -8087,7 +8087,7 @@ local function RunQuest11()
         QUEST_NAME = "End of the Beginning",
         NPC_NAME = "Sensei Moro",
         QUEST_OPTION_ARG = "CheckQuest",
-        MOVE_SPEED = 20,
+        MOVE_SPEED = 10,
         NPC_STOP_DISTANCE = 5,
     }
     
@@ -8631,7 +8631,7 @@ local function RunQuest12()
         QUEST_NAME = "Everything starts now.",
         NPC_NAME = "Wizard",
         NPC_POSITION = Vector3.new(-24.1, 80.9, -358.5),
-        MOVE_SPEED = 20,
+        MOVE_SPEED = 10,
         NPC_STOP_DISTANCE = 5,
     }
     
@@ -9123,7 +9123,7 @@ local function RunQuest13()
         NPC_NAME = "Bard",
         NPC_POSITION = Vector3.new(-130.9, 27.8, 109.8),
         MIN_LEVEL = 10,  -- Level ต่ำสุดที่ต้องการ
-        MOVE_SPEED = 20,
+        MOVE_SPEED = 10,
         NPC_STOP_DISTANCE = 5,
     }
     
@@ -9710,7 +9710,7 @@ local function RunQuest14()
         NPC_NAME = "Bard",
         NPC_POSITION = Vector3.new(-130.9, 27.8, 109.8),
         
-        MOVE_SPEED = 20,
+        MOVE_SPEED = 10,
         STOP_DISTANCE = 5,
     }
     
@@ -10964,7 +10964,7 @@ local function RunQuest16()
         ITEM_NAME = "Stonewake's Pickaxe",
         ITEM_QUANTITY = 1,
         
-        MOVE_SPEED = 20,
+        MOVE_SPEED = 10,
         STOP_DISTANCE = 5,
     }
     
@@ -11406,7 +11406,7 @@ local function RunQuest17()
         
         UNDERGROUND_OFFSET = 4,
         LAYING_ANGLE = 90,
-        MOVE_SPEED = 20,
+        MOVE_SPEED = 10,
         
         -- Smooth Movement Settings
         HOLD_POSITION_AFTER_MINE = true,  -- ค้าง Position หลังขุดเสร็จ
