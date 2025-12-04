@@ -12553,21 +12553,44 @@ local function RunQuest18()
     -- INVENTORY CHECK
     ----------------------------------------------------------------
     local function hasPickaxe(pickaxeName)
-        if not PlayerController or not PlayerController.Replica then
-            return false
-        end
-        
-        local replica = PlayerController.Replica
-        if not (replica.Data and replica.Data.Inventory and replica.Data.Inventory.Equipments) then
-            return false
-        end
-        
-        for _, item in pairs(replica.Data.Inventory.Equipments) do
-            if type(item) == "table" and item.Type == pickaxeName then
-                return true
+        -- ใช้ UI: PlayerGui.Menu.Frame.Frame.Menus.Tools.Frame
+        local menu = playerGui:FindFirstChild("Menu")
+        if not menu then
+            if DEBUG_MODE then
+                warn("[Q18] Menu not found → treat as NO pickaxe")
             end
+            return false
         end
-        
+
+        local ok, toolsFrame = pcall(function()
+            local f1    = menu:FindFirstChild("Frame")
+            local f2    = f1 and f1:FindFirstChild("Frame")
+            local menus = f2 and f2:FindFirstChild("Menus")
+            local tools = menus and menus:FindFirstChild("Tools")
+            local frame = tools and tools:FindFirstChild("Frame")
+            return frame
+        end)
+
+        if not ok or not toolsFrame then
+            if DEBUG_MODE then
+                warn("[Q18] Tools.Frame not found → treat as NO pickaxe")
+            end
+            return false
+        end
+
+        -- child ใน Frame จะเป็นพวก "Iron Pickaxe", "Stone Pickaxe", "Cobalt Pickaxe"
+        local gui = toolsFrame:FindFirstChild(pickaxeName)
+        if gui then
+            if DEBUG_MODE then
+                local visible = gui:IsA("GuiObject") and gui.Visible or "N/A"
+                print(string.format("[Q18] ✅ UI pickaxe '%s' found (Visible=%s)", pickaxeName, tostring(visible)))
+            end
+            return true
+        end
+
+        if DEBUG_MODE then
+            print(string.format("[Q18] ⚠️ UI pickaxe '%s' NOT found", pickaxeName))
+        end
         return false
     end
     
@@ -12808,56 +12831,72 @@ local function RunQuest18()
     end
     
     local function tryBuyPickaxe()
-        local pickaxeName = QUEST_CONFIG.TARGET_PICKAXE
-        
-        -- 1. เช็คว่ามีแล้วหรือยัง
+        local pickaxeName = QUEST_CONFIG.TARGET_PICKAXE or "Cobalt Pickaxe"
+
+        ----------------------------------------------------------------
+        -- 1) ถ้ามี Cobalt Pickaxe อยู่แล้ว → ไม่ต้องทำอะไร
+        ----------------------------------------------------------------
         if hasPickaxe(pickaxeName) then
             if DEBUG_MODE then
-                print(string.format("   ✅ Already have: %s", pickaxeName))
+                print(string.format("[Q18] ✅ Already have %s - skip auto buy", pickaxeName))
             end
             return true
         end
-        
-        -- 2. เช็ค Gold
+
+        ----------------------------------------------------------------
+        -- 2) เช็ค Gold > 9999 (เงื่อนไขที่คุณต้องการ)
+        ----------------------------------------------------------------
         local gold = getGold()
-        if gold < QUEST_CONFIG.MIN_GOLD_TO_BUY then
+        gold = gold or 0
+
+        -- MIN_GOLD_TO_BUY ใน CONFIG ตอนนี้คือ 9999 อยู่แล้ว
+        -- เราเลยใช้เงื่อนไข gold <= MIN_GOLD_TO_BUY → ต้องมากกว่า 9999 เท่านั้นถึงจะผ่าน
+        if gold <= QUEST_CONFIG.MIN_GOLD_TO_BUY then
             if DEBUG_MODE then
-                print(string.format("   ⏸️  Not enough gold (Need: %d, Have: %d)", 
-                    QUEST_CONFIG.MIN_GOLD_TO_BUY, gold))
+                print(string.format(
+                    "[Q18] ⏸ Gold not enough for %s (have %d, need > %d)",
+                    pickaxeName,
+                    gold,
+                    QUEST_CONFIG.MIN_GOLD_TO_BUY
+                ))
             end
+            -- ❗ ไม่เดินไป shop ถ้าเงินไม่ถึง
             return false
         end
-        
-        -- 3. มีเงินพอ แต่ยังไม่มี Pickaxe
-        print(string.format("\n🛒 Auto Buy: Need %s! (Gold: %d)", pickaxeName, gold))
-        
-        -- Pause ถ้ากำลังขุดอยู่
+
+        ----------------------------------------------------------------
+        -- 3) ผ่านแล้ว: Pause mining แล้วบินไป Shop เพื่อซื้อ
+        ----------------------------------------------------------------
+        print(string.format("\n🛒 [Q18] Auto Buy: Need %s! (Gold: %d)", pickaxeName, gold))
+
         local wasMining = IsMiningActive
         if wasMining then
             State.isPaused = true
             print("   ⏸️  Pausing mining...")
-            
+
             if ToolController then
                 ToolController.holdingM1 = false
             end
-            
+
             unlockPosition()
             task.wait(1)
         end
-        
-        -- 4. ไปที่ร้าน
+
+        -- 4) ไปที่ร้าน
         local shopPos = QUEST_CONFIG.SHOP_POSITION
-        print(string.format("   🚶 Going to shop (%.1f, %.1f, %.1f)...", 
+        print(string.format("   🚶 Going to shop (%.1f, %.1f, %.1f)...",
             shopPos.X, shopPos.Y, shopPos.Z))
-        
+
         local done = false
-        smoothMoveTo(shopPos, function() done = true end)
-        
+        smoothMoveTo(shopPos, function()
+            done = true
+        end)
+
         local t0 = tick()
         while not done and tick() - t0 < 30 do
             task.wait(0.1)
         end
-        
+
         if not done then
             warn("   ⚠️ Failed to reach shop!")
             if wasMining then
@@ -12865,26 +12904,26 @@ local function RunQuest18()
             end
             return false
         end
-        
+
         print("   ✅ Arrived at shop!")
         task.wait(1)
-        
-        -- 5. ซื้อ
+
+        -- 5) ซื้อ Cobalt Pickaxe
         local purchased = purchasePickaxe(pickaxeName)
-        
+
         if purchased then
             print("   ✅ Purchase complete!")
             task.wait(2)
         else
             warn("   ❌ Purchase failed!")
         end
-        
-        -- Resume mining
+
+        -- 6) กลับไปขุดต่อ ถ้าก่อนหน้านี้กำลังขุดอยู่
         if wasMining then
             print("   ▶️  Resuming mining...")
             State.isPaused = false
         end
-        
+
         return purchased
     end
     
