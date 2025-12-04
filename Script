@@ -1,5 +1,5 @@
 repeat wait(2) until game:IsLoaded()
-task.wait(180)
+task.wait(1)
 -- bundled_quests_v4_original_linear.lua
 -- Auto Quest Runner (Original logic from 1.lua–18.lua)
 -- NOTE:
@@ -140,7 +140,15 @@ local function SoftUnlockPosition()
     end
 end
 
-
+local function restoreCollisions()
+    local char = player.Character
+    if not char then return end
+    for _, part in ipairs(char:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = true
+        end
+    end
+end
 
 ----------------------------------------------------------------
 -- QUEST 1 ORIGINAL (from 1.lua)
@@ -162,7 +170,7 @@ local function RunQuest01()
     local QUEST_NAME = "Getting Started!"
     local NPC_NAME = "Sensei Moro"
     local QUEST_OPTION_ARG = "GiveIntroduction1"
-    local MOVE_SPEED = 10
+    local MOVE_SPEED = 25
     
     ----------------------------------------------------------------
     -- STATE MANAGEMENT
@@ -174,11 +182,37 @@ local function RunQuest01()
         bodyGyro = nil,
     }
     
+    local function restoreCollisions()
+        local char = player.Character
+        if not char then return end
+
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = true
+            end
+        end
+    end
+
     local function cleanupState()
-        if State.noclipConn then State.noclipConn:Disconnect() State.noclipConn = nil end
-        if State.moveConn then State.moveConn:Disconnect() State.moveConn = nil end
-        if State.bodyVelocity then State.bodyVelocity:Destroy() State.bodyVelocity = nil end
-        if State.bodyGyro then State.bodyGyro:Destroy() State.bodyGyro = nil end
+        if State.noclipConn then
+            State.noclipConn:Disconnect()
+            State.noclipConn = nil
+        end
+        if State.moveConn then
+            State.moveConn:Disconnect()
+            State.moveConn = nil
+        end
+        if State.bodyVelocity then
+            State.bodyVelocity:Destroy()
+            State.bodyVelocity = nil
+        end
+        if State.bodyGyro then
+            State.bodyGyro:Destroy()
+            State.bodyGyro = nil
+        end
+
+        -- ✅ สำคัญ: คืน CanCollide ให้ตัวละคร
+        restoreCollisions()
     end
     
     ----------------------------------------------------------------
@@ -209,6 +243,8 @@ local function RunQuest01()
             State.noclipConn:Disconnect()
             State.noclipConn = nil
         end
+        -- ✅ ปิด noclip แล้วคืนการชนให้ตัวละคร
+        restoreCollisions()
     end
     
     ----------------------------------------------------------------
@@ -517,20 +553,22 @@ local function RunQuest02()
     -- CONFIG
     ----------------------------------------------------------------
     local Quest2Active = true
-    
     local QUEST_CONFIG = {
-        QUEST_NAME = "First Pickaxe!",
+        QUEST_NAME = "First Pickaxe!",   -- แก้จาก QUESTNAME
         PICKAXE_NAME = "Stone Pickaxe",
         MINING_START_POSITION = Vector3.new(43.203, -3.717, -106.628),
-        MOVE_SPEED = 10,
-        STOP_DISTANCE = 6,
-        
-        -- 🔥 NEW: Priority Order
-        PRIORITY_ORDER = {
-            "Open",    -- 1. เปิด Equipments
-            "Equip",   -- 2. ใส่ Pickaxe
-            "Mine",    -- 3. ขุด Pebbles
-        }
+
+        UNDERGROUND_OFFSET = 4,
+        LAYING_ANGLE = 90,
+
+        MOVE_SPEED = 25,                 -- ถ้าด้านล่างใช้ MOVE_SPEED แทน MOVESPEED ด้วย
+        STOP_DISTANCE = 2,
+
+        PRIORITY_ORDER = {               -- แก้จาก PRIORITYORDER
+            "Open",
+            "Equip",
+            "Mine",
+        },
     }
     
     ----------------------------------------------------------------
@@ -589,6 +627,7 @@ local function RunQuest02()
         noclipConn = nil,
         bodyVelocity = nil,
         bodyGyro = nil,
+        positionLockConn = nil, 
         currentObjectiveFrame = nil,
     }
     
@@ -596,6 +635,8 @@ local function RunQuest02()
         if State.moveConn then State.moveConn:Disconnect() State.moveConn = nil end
         if State.hpWatchConn then State.hpWatchConn:Disconnect() State.hpWatchConn = nil end
         if State.noclipConn then State.noclipConn:Disconnect() State.noclipConn = nil end
+        if State.positionLockConn then  State.positionLockConn:Disconnect() State.positionLockConn = nil
+    end
         if State.bodyVelocity then State.bodyVelocity:Destroy() State.bodyVelocity = nil end
         if State.bodyGyro then State.bodyGyro:Destroy() State.bodyGyro = nil end
         State.currentTarget = nil
@@ -709,6 +750,8 @@ local function RunQuest02()
             State.noclipConn:Disconnect()
             State.noclipConn = nil
         end
+        -- ✅ ปิด noclip แล้วคืนการชนให้ตัวละคร
+        restoreCollisions()
     end
     
     local function smoothMoveTo(targetPos, stopDistance, callback)
@@ -773,9 +816,48 @@ local function RunQuest02()
         return true
     end
     
+
     ----------------------------------------------------------------
     -- HELPER FUNCTIONS
     ----------------------------------------------------------------
+
+
+    local function getPebbleUndergroundPosition(pebbleModel)
+        if not pebbleModel or not pebbleModel.Parent then 
+            return nil 
+        end
+        
+        -- Method 1: ใช้ Pivot/WorldPivot
+        local pivotCFrame = nil
+        pcall(function()
+            if pebbleModel.GetPivot then
+                pivotCFrame = pebbleModel:GetPivot()
+            elseif pebbleModel.WorldPivot then
+                pivotCFrame = pebbleModel.WorldPivot
+            end
+        end)
+        
+        if pivotCFrame then
+            local pos = pivotCFrame.Position
+            return Vector3.new(pos.X, pos.Y - QUEST_CONFIG.UNDERGROUND_OFFSET, pos.Z)
+        end
+        
+        -- Method 2: PrimaryPart
+        if pebbleModel.PrimaryPart then
+            local pos = pebbleModel.PrimaryPart.Position
+            return Vector3.new(pos.X, pos.Y - QUEST_CONFIG.UNDERGROUND_OFFSET, pos.Z)
+        end
+        
+        -- Method 3: FindFirstChildWhichIsA
+        local part = pebbleModel:FindFirstChildWhichIsA("BasePart")
+        if part then
+            local pos = part.Position
+            return Vector3.new(pos.X, pos.Y - QUEST_CONFIG.UNDERGROUND_OFFSET, pos.Z)
+        end
+        
+        return nil
+    end
+
     local HOTKEY_MAP = {
         ["1"] = Enum.KeyCode.One, ["2"] = Enum.KeyCode.Two, ["3"] = Enum.KeyCode.Three,
         ["4"] = Enum.KeyCode.Four, ["5"] = Enum.KeyCode.Five, ["6"] = Enum.KeyCode.Six,
@@ -819,8 +901,14 @@ local function RunQuest02()
     end
     
     local function getPebblePosition(pebbleModel)
-        if not pebbleModel or not pebbleModel.Parent then return nil end
-        if pebbleModel.PrimaryPart then return pebbleModel.PrimaryPart.Position end
+        if not pebbleModel or not pebbleModel.Parent then 
+            return nil 
+        end
+        
+        if pebbleModel.PrimaryPart then
+            return pebbleModel.PrimaryPart.Position
+        end
+        
         local part = pebbleModel:FindFirstChildWhichIsA("BasePart")
         return part and part.Position or nil
     end
@@ -833,6 +921,46 @@ local function RunQuest02()
         end
     end
     
+    local function lockPositionLayingDown(targetPos)
+        local char = player.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return end
+        
+        if State.positionLockConn then
+            State.positionLockConn:Disconnect()
+            State.positionLockConn = nil
+        end
+        
+        -- ✅ คำนวณมุม 90 องศา (นอน)
+        local angle = math.rad(QUEST_CONFIG.LAYING_ANGLE)
+        local baseCFrame = CFrame.new(targetPos)
+        local layingCFrame = baseCFrame * CFrame.Angles(angle, 0, 0)
+        
+        State.positionLockConn = RunService.Heartbeat:Connect(function()
+            if not char or not char.Parent or not hrp or not hrp.Parent then
+                if State.positionLockConn then
+                    State.positionLockConn:Disconnect()
+                    State.positionLockConn = nil
+                end
+                return
+            end
+            
+            -- ✅ Lock position และนอน
+            hrp.CFrame = layingCFrame
+            hrp.Velocity = Vector3.zero
+            hrp.AssemblyLinearVelocity = Vector3.zero
+        end)
+        
+        print("   🔒 Position locked (laying down)")
+    end
+
+    local function unlockPosition()
+        if State.positionLockConn then
+            State.positionLockConn:Disconnect()
+            State.positionLockConn = nil
+            print("   🔓 Position unlocked")
+        end
+    end
     ----------------------------------------------------------------
     -- HP CHECKER
     ----------------------------------------------------------------
@@ -1078,6 +1206,7 @@ local function RunQuest02()
                 continue
             end
             
+            -- ✅ cleanup ก่อนหา target ใหม่
             cleanupState()
             
             local targetPebble, dist = findNearestPebble()
@@ -1091,71 +1220,62 @@ local function RunQuest02()
             State.currentTarget = targetPebble
             State.targetDestroyed = false
             
-            local targetPos = getPebblePosition(targetPebble)
-            local currentHP = getPebbleHP(targetPebble)
-            
-            print(string.format("   🎯 Target: %s (dist: %d, HP: %d)", 
-                targetPebble.Parent.Name, math.floor(dist), currentHP))
-            
-            watchPebbleHP(targetPebble)
-            
-            -- ✅ FIX: ถ้า pebble ใกล้เกินไป (< 3 studs) ให้ข้ามไป
-            if dist < 3 then
-                print("   ⚠️ Pebble too close to starting position, skipping...")
-                State.targetDestroyed = true
+            -- ✅ ใช้ฟังก์ชันใหม่: getPebbleUndergroundPosition (ลดแกน Y)
+            local targetPos = getPebbleUndergroundPosition(targetPebble)
+            if not targetPos then
+                warn("   ❌ Cannot get pebble underground position!")
                 task.wait(1)
                 continue
             end
             
-            -- ✅ FIX: เพิ่ม STOP_DISTANCE เป็น 8 studs
-            local moveComplete = false
-            smoothMoveTo(targetPos, 8, function()
-                moveComplete = true
+            local currentHP = getPebbleHP(targetPebble)
+
+            -- ✅ FIX: Safe string formatting
+            local targetName = "Unknown"
+            if targetPebble then
+                pcall(function()
+                    if targetPebble.Parent then
+                        targetName = targetPebble.Parent.Name or "Unknown"
+                    end
+                end)
+            end
+
+            print(string.format("   🎯 Target: %s (dist: %d, HP: %d)", 
+                targetName, math.floor(dist), currentHP))
+            
+            watchPebbleHP(targetPebble)
+            
+            -- ✅ Move to underground position
+            local moveStarted = false
+            smoothMoveTo(targetPos, QUEST_CONFIG.STOP_DISTANCE, function()
+                lockPositionLayingDown(targetPos)
+                moveStarted = true
             end)
             
-            -- รอให้ movement เสร็จก่อน
-            local timeout = 10
+            -- รอให้ movement เสร็จ
+            local timeout = 15
             local startTime = tick()
-            while not moveComplete and tick() - startTime < timeout do
-                if not hrp or not hrp.Parent then break end
-                local currentDist = (targetPos - hrp.Position).Magnitude
-                if currentDist <= 8 then
-                    moveComplete = true
-                    break
-                end
+            while not moveStarted and (tick() - startTime) < timeout do
                 task.wait(0.1)
             end
             
-            -- ✅ FIX: หยุด movement ก่อน แล้วค่อย SoftLock
-            if State.moveConn then State.moveConn:Disconnect() State.moveConn = nil end
-            if State.bodyVelocity then 
-                State.bodyVelocity.Velocity = Vector3.zero
-                State.bodyVelocity:Destroy() 
-                State.bodyVelocity = nil 
-            end
-            if State.bodyGyro then State.bodyGyro:Destroy() State.bodyGyro = nil end
-            
-            task.wait(0.3)
-            
-            -- ✅ FIX: เช็คระยะก่อน SoftLock
-            local finalDist = (targetPos - hrp.Position).Magnitude
-            print(string.format("   📏 Final distance to pebble: %.1f studs", finalDist))
-            
-            if finalDist > 12 then
-                print("   ⚠️ Too far from pebble, retrying...")
-                State.targetDestroyed = true
-                continue
+            -- ถ้า timeout ให้ lock เลย
+            if not moveStarted then
+                lockPositionLayingDown(targetPos)
             end
             
-            -- ✅ SoftLock ที่ตำแหน่งปัจจุบัน (ไม่ใช่ starting position)
-            SoftLockPosition(-2)
+            task.wait(0.5)
             
-            -- Mining loop
+            -- ✅ Mining loop (นอนขุด)
             while not State.targetDestroyed and isQuest2StillActive() and not isCurrentObjectiveComplete() do
+                if not char or not char.Parent then
+                    print("   💀 Character died!")
+                    break
+                end
+                
                 if not targetPebble or not targetPebble.Parent then
                     print("   💥 Target removed!")
                     State.targetDestroyed = true
-                    SoftUnlockPosition()
                     break
                 end
                 
@@ -1163,13 +1283,10 @@ local function RunQuest02()
                     print("   ⚠️ Someone else mining!")
                     State.targetDestroyed = true
                     if ToolController then ToolController.holdingM1 = false end
-                    SoftUnlockPosition()
                     break
                 end
                 
-                local currentPos = getPebblePosition(targetPebble)
-                if currentPos then faceTarget(currentPos) end
-                
+                -- ขุด
                 local toolInHand = char:FindFirstChildWhichIsA("Tool")
                 local isPickaxeHeld = toolInHand and string.find(toolInHand.Name, "Pickaxe")
                 
@@ -1180,27 +1297,24 @@ local function RunQuest02()
                         pressKey(key)
                         task.wait(0.3)
                     else
-                        pcall(function() CHAR_RF:InvokeServer({Runes = {}, Name = QUEST_CONFIG.PICKAXE_NAME}) end)
+                        pcall(function() CHAR_RF:InvokeServer({Runes = {}}, {Name = QUEST_CONFIG.PICKAXE_NAME}) end)
                         task.wait(0.5)
                     end
                 else
-                    local pos = getPebblePosition(targetPebble)
-                    if pos and hrp and (pos - hrp.Position).Magnitude <= 12 then
-                        if ToolController and ToolActivatedFunc then
-                            ToolController.holdingM1 = true
-                            pcall(function() ToolActivatedFunc(ToolController, toolInHand) end)
-                        else
-                            pcall(function() TOOL_RF_BACKUP:InvokeServer(toolInHand.Name, true) end)
-                        end
+                    -- ✅ ขุด
+                    if ToolController and ToolActivatedFunc then
+                        ToolController.holdingM1 = true
+                        pcall(function() ToolActivatedFunc(ToolController, toolInHand) end)
                     else
-                        if ToolController then ToolController.holdingM1 = false end
+                        pcall(function() TOOL_RF_BACKUP:InvokeServer(toolInHand.Name, true) end)
                     end
                 end
                 
                 task.wait(0.15)
             end
             
-            SoftUnlockPosition()
+            -- ✅ Unlock position
+            --unlockPosition()
             
             if isCurrentObjectiveComplete() then
                 print("✅ Objective (Mine Pebbles) Complete!")
@@ -1208,11 +1322,11 @@ local function RunQuest02()
             end
             
             print("   🔄 Finding next target...")
-            task.wait(0.1)
+            task.wait(0.5)
         end
         
         print("\n🛑 Mining ended")
-        SoftUnlockPosition()
+        unlockPosition()
         cleanupState()
     end
     
@@ -1405,7 +1519,7 @@ local function RunQuest03()
         ITEM_TYPE = "Weapon",
         FORGE_DELAY = 2,
         FORGE_POSITION = Vector3.new(-192.3, 29.5, 168.1),  -- 🆕 Fixed position
-        MOVE_SPEED = 10,
+        MOVE_SPEED = 25,  
     }
     
     ----------------------------------------------------------------
@@ -1498,6 +1612,8 @@ local function RunQuest03()
             State.noclipConn:Disconnect()
             State.noclipConn = nil
         end
+        -- ✅ ปิด noclip แล้วคืนการชนให้ตัวละคร
+        restoreCollisions()
     end
     
     -- 🆕 smoothMoveTo with BodyVelocity + BodyGyro
@@ -2875,7 +2991,7 @@ local function RunQuest05()
         ZOMBIE_UNDERGROUND_OFFSET = 5,
         ZOMBIE_MAX_DISTANCE = 50,
         LAYING_ANGLE = 90,
-        MOVE_SPEED = 10,
+        MOVE_SPEED = 25,  
         
         -- 🔥 NEW: Priority Order
         PRIORITY_ORDER = {
@@ -3238,7 +3354,7 @@ local function RunQuest05()
         local targetZombie, minDist = nil, math.huge
         
         for _, child in ipairs(LIVING_FOLDER:GetChildren()) do
-            if string.match(child.Name, "^Zombie%d+") or string.match(child.Name, "^EliteZombie%d+") then
+            if string.match(child.Name, "^Zombie%d+$") then
                 if isZombieValid(child) then
                     local pos = getZombieUndergroundPosition(child)
                     if pos then
@@ -3283,6 +3399,8 @@ local function RunQuest05()
             State.noclipConn:Disconnect()
             State.noclipConn = nil
         end
+        -- ✅ ปิด noclip แล้วคืนการชนให้ตัวละคร
+        restoreCollisions()
     end
     
     ----------------------------------------------------------------
@@ -3609,7 +3727,11 @@ local function RunQuest05()
             end
             
             if not moveStarted then
-                lockPositionLayingDown(targetPos)
+                warn("   ⚠️ Move timeout, skip this rock to avoid teleport")
+                State.targetDestroyed = true
+                unlockPosition()
+                -- ไม่ต้อง lockPositionLayingDown ที่นี่
+                continue
             end
             
             task.wait(0.5)
@@ -3658,7 +3780,7 @@ local function RunQuest05()
                 task.wait(0.15)
             end
             
-            unlockPosition()
+            --unlockPosition()
             
             if isCurrentObjectiveComplete() then
                 print("✅ Objective (Mine Rocks) Complete!")
@@ -3733,8 +3855,12 @@ local function RunQuest05()
                 task.wait(0.1)
             end
             
+            -- ❌ อย่า hard-lock ถ้าไม่เคยเดินถึงเป้าหมาย
             if not moveStarted then
-                lockPositionFollowTarget(targetZombie)
+                warn("   ⚠️ Move timeout, skip this zombie to avoid teleport")
+                State.targetDestroyed = true
+                unlockPosition()
+                continue
             end
             
             task.wait(0.5)
@@ -3799,7 +3925,7 @@ local function RunQuest05()
                 task.wait(0.15)
             end
             
-            unlockPosition()
+            --unlockPosition()
             
             if isCurrentObjectiveComplete() then
                 print("✅ Objective (Kill Zombies) Complete!")
@@ -4009,7 +4135,7 @@ local function RunQuest06()
         ITEM_TYPE = "Armor",
         FORGE_DELAY = 2,
         FORGE_POSITION = Vector3.new(-192.3, 29.5, 168.1),  -- 🆕 Fixed position
-        MOVE_SPEED = 10,
+        MOVE_SPEED = 25,  
     }
     
     ----------------------------------------------------------------
@@ -4102,6 +4228,8 @@ local function RunQuest06()
             State.noclipConn:Disconnect()
             State.noclipConn = nil
         end
+        -- ✅ ปิด noclip แล้วคืนการชนให้ตัวละคร
+        restoreCollisions()
     end
     
     -- 🆕 smoothMoveTo with BodyVelocity + BodyGyro
@@ -4715,7 +4843,7 @@ local function RunQuest07()
         UNDERGROUND_OFFSET = 4,
         MIN_ORES_FOR_FORGE = 10,
         LAYING_ANGLE = 90,
-        MOVE_SPEED = 10,
+        MOVE_SPEED = 25,  
         SELL_NPC_NAME = "Marbles",
         SELL_NPC_POSITION = Vector3.new(49.84, 29.17, 85.84),
         PRIORITY_ORDER = {"Purchase", "Kill", "Mine", "Forge"},
@@ -5252,7 +5380,7 @@ local function RunQuest07()
         local targetZombie, minDist = nil, math.huge
         
         for _, child in ipairs(LIVING_FOLDER:GetChildren()) do
-            if string.match(child.Name, "Zombie%d+") or string.match(child.Name, "EliteZombie%d+") then
+            if string.match(child.Name, "^Zombie%d+$") then
                 if isZombieValid(child) then
                     local pos = getZombieUndergroundPosition(child)
                     if pos then
@@ -5343,6 +5471,7 @@ local function RunQuest07()
             State.noclipConn:Disconnect()
             State.noclipConn = nil
         end
+        restoreCollisions()
     end
     
     local function smoothMoveTo(targetPos, callback)
@@ -6065,7 +6194,7 @@ local function RunQuest07()
                 task.wait(0.15)
             end
             
-            unlockPosition()
+            --unlockPosition()
             
             if isCurrentObjectiveComplete() then
                 print("   ✅ Objective 4 (Mine Pebble) Complete!")
@@ -6208,7 +6337,7 @@ local function RunQuest07()
                 task.wait(0.15)
             end
             
-            unlockPosition()
+            --unlockPosition()
             
             if isCurrentObjectiveComplete() then
                 print("   ✅ Objective 2 (Kill Zombies) Complete!")
@@ -6482,7 +6611,7 @@ local function RunQuest08()
         QUEST_NAME = "Reporting In",
         NPC_NAME = "Sensei Moro",
         QUEST_OPTION_ARG = "CheckQuest",
-        MOVE_SPEED = 10,
+        MOVE_SPEED = 25,  
         NPC_STOP_DISTANCE = 5,  -- หยุดห่างจาก NPC 5 studs
     }
     
@@ -7427,7 +7556,7 @@ local function RunQuest10()
         QUEST_NAME = "Runes of Power",
         NPC_NAME = "Runemaker",
         NPC_POSITION = Vector3.new(-271.7, 20.3, 141.9),
-        MOVE_SPEED = 10,
+        MOVE_SPEED = 25,  
         NPC_STOP_DISTANCE = 5,
         
         -- Rune ที่ต้องการ (เลือกอันใดอันหนึ่ง)
@@ -8087,7 +8216,7 @@ local function RunQuest11()
         QUEST_NAME = "End of the Beginning",
         NPC_NAME = "Sensei Moro",
         QUEST_OPTION_ARG = "CheckQuest",
-        MOVE_SPEED = 10,
+        MOVE_SPEED = 25,  
         NPC_STOP_DISTANCE = 5,
     }
     
@@ -8631,7 +8760,7 @@ local function RunQuest12()
         QUEST_NAME = "Everything starts now.",
         NPC_NAME = "Wizard",
         NPC_POSITION = Vector3.new(-24.1, 80.9, -358.5),
-        MOVE_SPEED = 10,
+        MOVE_SPEED = 25,  
         NPC_STOP_DISTANCE = 5,
     }
     
@@ -9123,7 +9252,7 @@ local function RunQuest13()
         NPC_NAME = "Bard",
         NPC_POSITION = Vector3.new(-130.9, 27.8, 109.8),
         MIN_LEVEL = 10,  -- Level ต่ำสุดที่ต้องการ
-        MOVE_SPEED = 10,
+        MOVE_SPEED = 25,  
         NPC_STOP_DISTANCE = 5,
     }
     
@@ -9710,7 +9839,7 @@ local function RunQuest14()
         NPC_NAME = "Bard",
         NPC_POSITION = Vector3.new(-130.9, 27.8, 109.8),
         
-        MOVE_SPEED = 10,
+        MOVE_SPEED = 25,  
         STOP_DISTANCE = 5,
     }
     
@@ -10404,7 +10533,7 @@ local function RunQuest15()
     -- GOLD SYSTEM
     ----------------------------------------------------------------
     local function getPlayerGold()
-        print("   🔍 Checking player gold...")
+        --print("   🔍 Checking player gold...")
         
         -- Path: PlayerGui.Main.Screen.Hud.Gold
         local goldLabel = playerGui:FindFirstChild("Main")
@@ -10413,19 +10542,19 @@ local function RunQuest15()
                          and playerGui.Main.Screen.Hud:FindFirstChild("Gold")
         
         if not goldLabel then
-            warn("   ❌ Gold Label not found!")
-            warn("   💡 Path: PlayerGui.Main.Screen.Hud.Gold")
+            --warn("   ❌ Gold Label not found!")
+            --warn("   💡 Path: PlayerGui.Main.Screen.Hud.Gold")
             return nil
         end
         
         if not goldLabel:IsA("TextLabel") then
-            warn("   ❌ Gold is not a TextLabel!")
+           --warn("   ❌ Gold is not a TextLabel!")
             return nil
         end
         
         local goldText = goldLabel.Text
         if DEBUG_MODE then
-            print(string.format("   📊 Gold Text: '%s'", goldText))
+            --print(string.format("   📊 Gold Text: '%s'", goldText))
         end
         
         -- แยก Gold จากข้อความ (เช่น "$3,722.72" → 3722.72)
@@ -10434,10 +10563,10 @@ local function RunQuest15()
         local gold = tonumber(goldString)
         
         if gold then
-            print(string.format("   ✅ Player Gold: $%.2f", gold))
+            --print(string.format("   ✅ Player Gold: $%.2f", gold))
             return gold
         else
-            warn("   ❌ Failed to parse gold from text!")
+            --warn("   ❌ Failed to parse gold from text!")
             return nil
         end
     end
@@ -10446,15 +10575,15 @@ local function RunQuest15()
         local gold = getPlayerGold()
         
         if not gold then
-            warn("   ❌ Cannot determine player gold!")
+            --warn("   ❌ Cannot determine player gold!")
             return false
         end
         
         if gold < QUEST_CONFIG.MIN_GOLD then
-            print(string.format("   ✅ Gold $%.2f < $%d - Should claim index!", gold, QUEST_CONFIG.MIN_GOLD))
+            --print(string.format("   ✅ Gold $%.2f < $%d - Should claim index!", gold, QUEST_CONFIG.MIN_GOLD))
             return true
         else
-            print(string.format("   ⏸️  Gold $%.2f >= $%d - No need to claim", gold, QUEST_CONFIG.MIN_GOLD))
+            --print(string.format("   ⏸️  Gold $%.2f >= $%d - No need to claim", gold, QUEST_CONFIG.MIN_GOLD))
             return false
         end
     end
@@ -10470,8 +10599,8 @@ local function RunQuest15()
                        and playerGui.Menu.Frame.Frame.Menus:FindFirstChild("Index")
         
         if not indexUI then
-            warn("   ❌ Index UI not found!")
-            warn("   💡 Path: PlayerGui.Menu.Frame.Frame.Menus.Index")
+            --warn("   ❌ Index UI not found!")
+            --warn("   💡 Path: PlayerGui.Menu.Frame.Frame.Menus.Index")
             return nil
         end
         
@@ -10484,13 +10613,13 @@ local function RunQuest15()
         
         local pages = indexUI:FindFirstChild("Pages")
         if not pages then
-            warn("   ❌ Pages not found!")
+            --warn("   ❌ Pages not found!")
             return nil
         end
         
         local oresPage = pages:FindFirstChild("Ores")
         if not oresPage then
-            warn("   ❌ Ores page not found!")
+            --warn("   ❌ Ores page not found!")
             return nil
         end
         
@@ -10506,13 +10635,13 @@ local function RunQuest15()
         
         local enemiesPage = pages:FindFirstChild("Enemies")
         if not enemiesPage then
-            warn("   ❌ Enemies page not found!")
+            --warn("   ❌ Enemies page not found!")
             return nil
         end
         
         local scrollingFrame = enemiesPage:FindFirstChild("ScrollingFrame")
         if not scrollingFrame then
-            warn("   ❌ Enemies ScrollingFrame not found!")
+            --warn("   ❌ Enemies ScrollingFrame not found!")
             return nil
         end
         
@@ -10528,13 +10657,13 @@ local function RunQuest15()
         
         local equipmentsPage = pages:FindFirstChild("Equipments")
         if not equipmentsPage then
-            warn("   ❌ Equipments page not found!")
+            --warn("   ❌ Equipments page not found!")
             return nil
         end
         
         local scrollingFrame = equipmentsPage:FindFirstChild("ScrollingFrame")
         if not scrollingFrame then
-            warn("   ❌ Equipments ScrollingFrame not found!")
+            --warn("   ❌ Equipments ScrollingFrame not found!")
             return nil
         end
         
@@ -10547,11 +10676,11 @@ local function RunQuest15()
     local function findClaimableOres()
         local claimableOres = {}
         
-        print("\n🪨 Scanning for claimable Ores...")
+        --print("\n🪨 Scanning for claimable Ores...")
         
         local oresPage = getOresPage()
         if not oresPage then
-            warn("   ❌ Cannot access Ores page!")
+            --warn("   ❌ Cannot access Ores page!")
             return claimableOres
         end
         
@@ -10559,7 +10688,7 @@ local function RunQuest15()
         for _, child in ipairs(oresPage:GetChildren()) do
             if string.find(child.Name, "List$") then  -- ลงท้ายด้วย "List"
                 if DEBUG_MODE then
-                    print(string.format("   📁 Found Map List: %s", child.Name))
+                    --print(string.format("   📁 Found Map List: %s", child.Name))
                 end
                 
                 -- วน loop หา Ore ในแต่ละ Map
@@ -10572,7 +10701,7 @@ local function RunQuest15()
                                 local oreName = oreItem.Name
                                 
                                 if DEBUG_MODE then
-                                    print(string.format("      ✅ Claimable: %s (Map: %s)", oreName, child.Name))
+                                    --print(string.format("      ✅ Claimable: %s (Map: %s)", oreName, child.Name))
                                 end
                                 
                                 table.insert(claimableOres, {
@@ -10587,19 +10716,19 @@ local function RunQuest15()
             end
         end
         
-        print(string.format("   📊 Found %d claimable ores", #claimableOres))
+        --print(string.format("   📊 Found %d claimable ores", #claimableOres))
         
         return claimableOres
     end
     
     local function claimOre(oreName)
         if not CLAIM_ORE_RF then
-            warn("   ❌ ClaimOre Remote not available!")
+            --warn("   ❌ ClaimOre Remote not available!")
             return false
         end
         
         if DEBUG_MODE then
-            print(string.format("   🪨 Claiming ore: %s", oreName))
+            --print(string.format("   🪨 Claiming ore: %s", oreName))
         end
         
         local success, result = pcall(function()
@@ -10607,10 +10736,10 @@ local function RunQuest15()
         end)
         
         if success then
-            print(string.format("   ✅ Claimed: %s", oreName))
+            --print(string.format("   ✅ Claimed: %s", oreName))
             return true
         else
-            warn(string.format("   ❌ Failed to claim %s: %s", oreName, tostring(result)))
+            --warn(string.format("   ❌ Failed to claim %s: %s", oreName, tostring(result)))
             return false
         end
     end
@@ -10621,11 +10750,11 @@ local function RunQuest15()
     local function findClaimableEnemies()
         local claimableEnemies = {}
         
-        print("\n👹 Scanning for claimable Enemies...")
+        --print("\n👹 Scanning for claimable Enemies...")
         
         local enemiesPage = getEnemiesPage()
         if not enemiesPage then
-            warn("   ❌ Cannot access Enemies page!")
+            --warn("   ❌ Cannot access Enemies page!")
             return claimableEnemies
         end
         
@@ -10633,7 +10762,7 @@ local function RunQuest15()
         for _, child in ipairs(enemiesPage:GetChildren()) do
             if string.find(child.Name, "List$") then  -- ลงท้ายด้วย "List"
                 if DEBUG_MODE then
-                    print(string.format("   📁 Found Map List: %s", child.Name))
+                    --print(string.format("   📁 Found Map List: %s", child.Name))
                 end
                 
                 -- วน loop หา Enemy ในแต่ละ Map
@@ -10646,7 +10775,7 @@ local function RunQuest15()
                                 local enemyName = enemyItem.Name
                                 
                                 if DEBUG_MODE then
-                                    print(string.format("      ✅ Claimable: %s (Map: %s)", enemyName, child.Name))
+                                    --print(string.format("      ✅ Claimable: %s (Map: %s)", enemyName, child.Name))
                                 end
                                 
                                 table.insert(claimableEnemies, {
@@ -10668,12 +10797,12 @@ local function RunQuest15()
     
     local function claimEnemy(enemyName)
         if not CLAIM_ENEMY_RF then
-            warn("   ❌ ClaimEnemy Remote not available!")
+            --warn("   ❌ ClaimEnemy Remote not available!")
             return false
         end
         
         if DEBUG_MODE then
-            print(string.format("   👹 Claiming enemy: %s", enemyName))
+            --print(string.format("   👹 Claiming enemy: %s", enemyName))
         end
         
         local success, result = pcall(function()
@@ -10681,7 +10810,7 @@ local function RunQuest15()
         end)
         
         if success then
-            print(string.format("   ✅ Claimed: %s", enemyName))
+            --print(string.format("   ✅ Claimed: %s", enemyName))
             return true
         else
             warn(string.format("   ❌ Failed to claim %s: %s", enemyName, tostring(result)))
@@ -10695,11 +10824,11 @@ local function RunQuest15()
     local function findClaimableEquipments()
         local claimableEquipments = {}
         
-        print("\n⚔️ Scanning for claimable Equipments...")
+        --print("\n⚔️ Scanning for claimable Equipments...")
         
         local equipmentsPage = getEquipmentsPage()
         if not equipmentsPage then
-            warn("   ❌ Cannot access Equipments page!")
+            --warn("   ❌ Cannot access Equipments page!")
             return claimableEquipments
         end
         
@@ -10708,7 +10837,7 @@ local function RunQuest15()
             -- กรณีที่ 1: เป็น List (เช่น "MediumHelmet List")
             if string.find(child.Name, "List$") then
                 if DEBUG_MODE then
-                    print(string.format("   📁 Found Equipment List: %s", child.Name))
+                    --print(string.format("   📁 Found Equipment List: %s", child.Name))
                 end
                 
                 -- วน loop หา Equipment ข้างใน List
@@ -10721,7 +10850,7 @@ local function RunQuest15()
                                 local equipName = equipItem.Name
                                 
                                 if DEBUG_MODE then
-                                    print(string.format("      ✅ Claimable: %s (List: %s)", equipName, child.Name))
+                                    --print(string.format("      ✅ Claimable: %s (List: %s)", equipName, child.Name))
                                 end
                                 
                                 table.insert(claimableEquipments, {
@@ -10743,7 +10872,7 @@ local function RunQuest15()
                             local equipName = child.Name
                             
                             if DEBUG_MODE then
-                                print(string.format("   ✅ Claimable: %s (Direct)", equipName))
+                                --print(string.format("   ✅ Claimable: %s (Direct)", equipName))
                             end
                             
                             table.insert(claimableEquipments, {
@@ -10757,19 +10886,19 @@ local function RunQuest15()
             end
         end
         
-        print(string.format("   📊 Found %d claimable equipments", #claimableEquipments))
+        --print(string.format("   📊 Found %d claimable equipments", #claimableEquipments))
         
         return claimableEquipments
     end
     
     local function claimEquipment(equipmentName)
         if not CLAIM_EQUIPMENT_RF then
-            warn("   ❌ ClaimEquipment Remote not available!")
+            --warn("   ❌ ClaimEquipment Remote not available!")
             return false
         end
         
         if DEBUG_MODE then
-            print(string.format("   ⚔️ Claiming equipment: %s", equipmentName))
+            --print(string.format("   ⚔️ Claiming equipment: %s", equipmentName))
         end
         
         local success, result = pcall(function()
@@ -10789,20 +10918,20 @@ local function RunQuest15()
     -- MAIN CLAIM EXECUTION
     ----------------------------------------------------------------
     local function claimAllIndex()
-        print("📜 Auto Claiming Index...")
+        --print("📜 Auto Claiming Index...")
         
         local totalClaimed = 0
         local totalFailed = 0
         
         -- 1. Claim Ores
-        print("\n" .. string.rep("=", 50))
-        print("🪨 CLAIMING ORES")
-        print(string.rep("=", 50))
+        --print("\n" .. string.rep("=", 50))
+        --print("🪨 CLAIMING ORES")
+        --print(string.rep("=", 50))
         
         local claimableOres = findClaimableOres()
         
         for i, ore in ipairs(claimableOres) do
-            print(string.format("\n[%d/%d] Claiming %s...", i, #claimableOres, ore.Name))
+            --print(string.format("\n[%d/%d] Claiming %s...", i, #claimableOres, ore.Name))
             
             local success = claimOre(ore.Name)
             
@@ -10816,14 +10945,14 @@ local function RunQuest15()
         end
         
         -- 2. Claim Enemies
-        print("\n" .. string.rep("=", 50))
-        print("👹 CLAIMING ENEMIES")
-        print(string.rep("=", 50))
+        --print("\n" .. string.rep("=", 50))
+        --print("👹 CLAIMING ENEMIES")
+        --print(string.rep("=", 50))
         
         local claimableEnemies = findClaimableEnemies()
         
         for i, enemy in ipairs(claimableEnemies) do
-            print(string.format("\n[%d/%d] Claiming %s...", i, #claimableEnemies, enemy.Name))
+            --print(string.format("\n[%d/%d] Claiming %s...", i, #claimableEnemies, enemy.Name))
             
             local success = claimEnemy(enemy.Name)
             
@@ -10837,14 +10966,14 @@ local function RunQuest15()
         end
         
         -- 3. Claim Equipments
-        print("\n" .. string.rep("=", 50))
-        print("⚔️ CLAIMING EQUIPMENTS")
-        print(string.rep("=", 50))
+        -- print("\n" .. string.rep("=", 50))
+        -- print("⚔️ CLAIMING EQUIPMENTS")
+        -- print(string.rep("=", 50))
         
         local claimableEquipments = findClaimableEquipments()
         
         for i, equipment in ipairs(claimableEquipments) do
-            print(string.format("\n[%d/%d] Claiming %s...", i, #claimableEquipments, equipment.Name))
+            --print(string.format("\n[%d/%d] Claiming %s...", i, #claimableEquipments, equipment.Name))
             
             local success = claimEquipment(equipment.Name)
             
@@ -10858,12 +10987,12 @@ local function RunQuest15()
         end
         
         -- Summary
-        print("\n" .. string.rep("=", 50))
-        print("📊 CLAIM SUMMARY")
-        print(string.rep("=", 50))
-        print(string.format("   ✅ Successfully Claimed: %d", totalClaimed))
-        print(string.format("   ❌ Failed: %d", totalFailed))
-        print(string.rep("=", 50))
+        -- print("\n" .. string.rep("=", 50))
+        -- print("📊 CLAIM SUMMARY")
+        -- print(string.rep("=", 50))
+        -- print(string.format("   ✅ Successfully Claimed: %d", totalClaimed))
+        -- print(string.format("   ❌ Failed: %d", totalFailed))
+        -- print(string.rep("=", 50))
         
         return totalClaimed > 0
     end
@@ -10873,16 +11002,16 @@ local function RunQuest15()
     ----------------------------------------------------------------
     local function RunQuest15()
         print(string.rep("=", 50))
-        print("🚀 QUEST 15: " .. QUEST_CONFIG.QUEST_NAME)
-        print("🎯 Objective: Auto Claim Index (Codex)")
-        print(string.format("✅ Strategy: Check Gold → Claim All Index"))
-        print(string.rep("=", 50))
+        --print("🚀 QUEST 15: " .. QUEST_CONFIG.QUEST_NAME)
+        --print("🎯 Objective: Auto Claim Index (Codex)")
+        --print(string.format("✅ Strategy: Check Gold → Claim All Index"))
+        --print(string.rep("=", 50))
         
         -- เช็ค Gold ก่อน
-        print("\n🔍 Pre-check: Verifying gold requirement...")
+        --print("\n🔍 Pre-check: Verifying gold requirement...")
         if not shouldClaimIndex() then
-            print("\n✅ No need to claim (Gold sufficient)")
-            print(string.rep("=", 50))
+            --print("\n✅ No need to claim (Gold sufficient)")
+            --print(string.rep("=", 50))
             return
         end
         
@@ -10897,27 +11026,27 @@ local function RunQuest15()
             local success = claimAllIndex()
             
             if success then
-                print("\n✅ Claiming complete!")
+                --print("\n✅ Claiming complete!")
                 
                 -- เช็ค Gold หลัง Claim
                 task.wait(2)
                 local newGold = getPlayerGold()
                 if newGold then
-                    print(string.format("\n💰 New Gold: $%.2f", newGold))
+                    --print(string.format("\n💰 New Gold: $%.2f", newGold))
                 end
                 
                 break
             else
-                warn("\n❌ No items claimed or all failed")
+                --warn("\n❌ No items claimed or all failed")
                 break
             end
         end
         
         task.wait(1)
         
-        print("\n" .. string.rep("=", 50))
-        print("✅ Quest 15 Complete!")
-        print(string.rep("=", 50))
+        -- print("\n" .. string.rep("=", 50))
+        -- print("✅ Quest 15 Complete!")
+        -- print(string.rep("=", 50))
         
         Quest15Active = false
     end
@@ -10964,7 +11093,7 @@ local function RunQuest16()
         ITEM_NAME = "Stonewake's Pickaxe",
         ITEM_QUANTITY = 1,
         
-        MOVE_SPEED = 10,
+        MOVE_SPEED = 25,  
         STOP_DISTANCE = 5,
     }
     
@@ -11406,7 +11535,7 @@ local function RunQuest17()
         
         UNDERGROUND_OFFSET = 4,
         LAYING_ANGLE = 90,
-        MOVE_SPEED = 10,
+        MOVE_SPEED = 25,  
         
         -- Smooth Movement Settings
         HOLD_POSITION_AFTER_MINE = true,  -- ค้าง Position หลังขุดเสร็จ
@@ -11732,11 +11861,13 @@ local function RunQuest17()
         end)
     end
     
+    
     local function disableNoclip()
         if State.noclipConn then
             State.noclipConn:Disconnect()
             State.noclipConn = nil
         end
+        restoreCollisions()
     end
     
     local function smoothMoveTo(targetPos, callback)
@@ -12180,7 +12311,7 @@ local function RunQuest18()
         ROCK_NAME = "Basalt Rock",
         UNDERGROUND_OFFSET = 4,
         LAYING_ANGLE = 90,
-        MOVE_SPEED = 20,
+        MOVE_SPEED = 25,  
         STOP_DISTANCE = 2,
         
         MINING_PATHS = {
@@ -12856,6 +12987,7 @@ local function RunQuest18()
             State.noclipConn:Disconnect()
             State.noclipConn = nil
         end
+        restoreCollisions()
     end
     
     function smoothMoveTo(targetPos, callback)
