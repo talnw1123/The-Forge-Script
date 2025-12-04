@@ -1519,7 +1519,7 @@ local function RunQuest03()
         ITEM_TYPE = "Weapon",
         FORGE_DELAY = 2,
         FORGE_POSITION = Vector3.new(-192.3, 29.5, 168.1),  -- 🆕 Fixed position
-        MOVE_SPEED = 25,  
+        MOVE_SPEED = 30,  
     }
     
     ----------------------------------------------------------------
@@ -1586,7 +1586,6 @@ local function RunQuest03()
     
     ----------------------------------------------------------------
     -- NOCLIP & MOVEMENT
-    ----------------------------------------------------------------
     local function enableNoclip()
         if State.noclipConn then return end
         
@@ -2037,7 +2036,7 @@ local function RunQuest03()
         return true
     end
     
-
+    
     local function startForge(oreSelection)
         print("   🔥 Starting Forge with:")
         for oreName, amount in pairs(oreSelection) do
@@ -4152,7 +4151,7 @@ local function RunQuest06()
         ITEM_TYPE = "Armor",
         FORGE_DELAY = 2,
         FORGE_POSITION = Vector3.new(-192.3, 29.5, 168.1),  -- 🆕 Fixed position
-        MOVE_SPEED = 25,  
+        MOVE_SPEED = 30,  
     }
     
     ----------------------------------------------------------------
@@ -4860,7 +4859,7 @@ local function RunQuest07()
         UNDERGROUND_OFFSET = 4,
         MIN_ORES_FOR_FORGE = 10,
         LAYING_ANGLE = 90,
-        MOVE_SPEED = 25,  
+        MOVE_SPEED = 30,  
         SELL_NPC_NAME = "Marbles",
         SELL_NPC_POSITION = Vector3.new(49.84, 29.17, 85.84),
         PRIORITY_ORDER = {"Purchase", "Kill", "Mine", "Forge"},
