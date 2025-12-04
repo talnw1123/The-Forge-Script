@@ -11,6 +11,53 @@ local Players = game:GetService("Players")
 local player  = Players.LocalPlayer
 
 
+local function waitForLevelUI()
+    local maxAttempts = 60  -- รอสูงสุด 60 ครั้ง (60 วินาที)
+    local attempt = 0
+    
+    while attempt < maxAttempts do
+        attempt = attempt + 1
+        
+        -- ✅ เช็ค UI Level path: PlayerGui.Main.Screen.Hud.Level
+        local levelUI = playerGui:FindFirstChild("Main") 
+            and playerGui.Main:FindFirstChild("Screen") 
+            and playerGui.Main.Screen:FindFirstChild("Hud")
+            and playerGui.Main.Screen.Hud:FindFirstChild("Level")
+        
+        if levelUI and levelUI:IsA("TextLabel") then
+            -- ✅ เช็คว่า UI มี Text หรือไม่
+            if levelUI.Text ~= "" and levelUI.Text ~= nil then
+                print(string.format("   ✅ Level UI found! (Attempt %d/%d)", attempt, maxAttempts))
+                print(string.format("   📊 Player Level: %s", levelUI.Text))
+                return true
+            else
+                print(string.format("   ⏳ Level UI found but empty... (Attempt %d/%d)", attempt, maxAttempts))
+            end
+        else
+            print(string.format("   ⏳ Waiting for Level UI... (Attempt %d/%d)", attempt, maxAttempts))
+        end
+        
+        task.wait(1)  -- รอ 1 วินาที แล้วลองใหม่
+    end
+    
+    warn("❌ Failed to find Level UI after " .. maxAttempts .. " attempts!")
+    warn("   Continuing anyway, but Quest may fail...")
+    return false
+end
+
+-- รอจนกว่าจะเจอ UI Level
+local uiReady = waitForLevelUI()
+
+if uiReady then
+    print("✅ UI fully loaded! Starting quests...")
+    print(string.rep("=", 60))
+else
+    warn("⚠️ UI not fully loaded, but starting anyway...")
+    print(string.rep("=", 60))
+end
+
+
+
 ------------------------------------------------------------
 -- GLOBAL SOFT LOCK (กันตก map ตอนขุด/ตี)
 ------------------------------------------------------------
