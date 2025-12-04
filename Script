@@ -12385,7 +12385,7 @@ local function RunQuest18()
         AUTO_BUY_ENABLED = true,
         AUTO_BUY_INTERVAL = 15,
         TARGET_PICKAXE = "Cobalt Pickaxe",
-        MIN_GOLD_TO_BUY = 9999,
+        MIN_GOLD_TO_BUY = 10000,
         SHOP_POSITION = Vector3.new(-165, 22, -111.7),
         
         -- Priority 4: Mining
@@ -12851,7 +12851,7 @@ local function RunQuest18()
 
         -- MIN_GOLD_TO_BUY ใน CONFIG ตอนนี้คือ 9999 อยู่แล้ว
         -- เราเลยใช้เงื่อนไข gold <= MIN_GOLD_TO_BUY → ต้องมากกว่า 9999 เท่านั้นถึงจะผ่าน
-        if gold <= QUEST_CONFIG.MIN_GOLD_TO_BUY then
+        if gold < QUEST_CONFIG.MIN_GOLD_TO_BUY then
             if DEBUG_MODE then
                 print(string.format(
                     "[Q18] ⏸ Gold not enough for %s (have %d, need > %d)",
