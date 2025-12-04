@@ -93,6 +93,59 @@ end
 task.wait(1)  -- รอเพิ่มอีกนิดเพื่อความแน่ใจ
 
 ------------------------------------------------------------
+-- 🛡️ ANTI-AFK VIRTUAL CLICK SYSTEM
+-- คลิกกลางจอจริง 5 ครั้ง (delay 0.5 วิ) ทุกๆ 2 นาที
+------------------------------------------------------------
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local GuiService = game:GetService("GuiService")
+local camera = workspace.CurrentCamera
+
+local ANTI_AFK_CONFIG = {
+    CLICK_COUNT = 5,           -- จำนวนคลิกต่อรอบ
+    CLICK_DELAY = 0.5,         -- delay ระหว่างคลิก (วินาที)
+    INTERVAL = 120,            -- ทุกๆ 2 นาที (120 วินาที)
+}
+
+local function getScreenCenter()
+    local viewportSize = camera.ViewportSize
+    local guiInset = GuiService:GetGuiInset()
+    local centerX = viewportSize.X / 2
+    local centerY = (viewportSize.Y / 2) + guiInset.Y
+    return centerX, centerY
+end
+
+local function performAntiAfkClicks()
+    local centerX, centerY = getScreenCenter()
+    
+    print("🛡️ [ANTI-AFK] Performing " .. ANTI_AFK_CONFIG.CLICK_COUNT .. " virtual clicks at center...")
+    
+    for i = 1, ANTI_AFK_CONFIG.CLICK_COUNT do
+        -- Mouse Down (คลิกซ้าย)
+        VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, true, game, 1)
+        task.wait(0.05)
+        -- Mouse Up
+        VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, false, game, 1)
+        
+        print(string.format("   🖱️ Click %d/%d at (%.0f, %.0f)", i, ANTI_AFK_CONFIG.CLICK_COUNT, centerX, centerY))
+        
+        if i < ANTI_AFK_CONFIG.CLICK_COUNT then
+            task.wait(ANTI_AFK_CONFIG.CLICK_DELAY)
+        end
+    end
+    
+    print("🛡️ [ANTI-AFK] Clicks complete! Next in " .. ANTI_AFK_CONFIG.INTERVAL .. " seconds.")
+end
+
+-- เริ่ม Anti-AFK Loop (รันแยก thread)
+task.spawn(function()
+    print("🛡️ [ANTI-AFK] System started! Clicking every " .. ANTI_AFK_CONFIG.INTERVAL .. " seconds.")
+    while true do
+        task.wait(ANTI_AFK_CONFIG.INTERVAL)
+        pcall(performAntiAfkClicks)
+    end
+end)
+
+------------------------------------------------------------
 -- GLOBAL SOFT LOCK (กันตก map ตอนขุด/ตี)
 ------------------------------------------------------------
 local SoftLockState = { conn = nil }
