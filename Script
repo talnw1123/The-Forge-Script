@@ -12175,10 +12175,24 @@ local function RunQuest17()
             State.positionLockConn = nil
         end
         
-        -- Move to new target ทันที (ไม่ต้อง unlock)
+        -- Move to new target
+        local moveComplete = false
         smoothMoveTo(newTargetPos, function()
             lockPositionLayingDown(newTargetPos)
+            moveComplete = true
         end)
+        
+        -- 🔧 FIX: รอให้ movement เสร็จก่อน return
+        local timeout = 15
+        local startTime = tick()
+        while not moveComplete and tick() - startTime < timeout do
+            task.wait(0.1)
+        end
+        
+        if not moveComplete then
+            warn("   ⚠️ Transition timeout!")
+            return false
+        end
         
         return true
     end
@@ -12213,8 +12227,8 @@ local function RunQuest17()
                 continue
             end
             
-            -- ไม่ cleanup state ทันที ถ้ายังมี position lock
-            if not State.positionLockConn then
+            -- 🔧 FIX: ไม่ cleanup ถ้ายังมี movement หรือ positionLock ทำงานอยู่
+            if not State.positionLockConn and not State.moveConn and not State.bodyVelocity then
                 cleanupState()
             end
             
@@ -13381,9 +13395,23 @@ local function RunQuest18()
             State.positionLockConn = nil
         end
         
+        local moveComplete = false
         smoothMoveTo(newTargetPos, function()
             lockPositionLayingDown(newTargetPos)
+            moveComplete = true
         end)
+        
+        -- 🔧 FIX: รอให้ movement เสร็จก่อน return
+        local timeout = 15
+        local startTime = tick()
+        while not moveComplete and tick() - startTime < timeout do
+            task.wait(0.1)
+        end
+        
+        if not moveComplete then
+            warn("   ⚠️ Transition timeout!")
+            return false
+        end
         
         return true
     end
@@ -13621,7 +13649,8 @@ local function RunQuest18()
                 continue
             end
             
-            if not State.positionLockConn then
+            -- 🔧 FIX: ไม่ cleanup ถ้ายังมี movement หรือ positionLock ทำงานอยู่
+            if not State.positionLockConn and not State.moveConn and not State.bodyVelocity then
                 cleanupState()
             end
             
